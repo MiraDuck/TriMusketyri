@@ -33,6 +33,9 @@ mode_names = {
 player_speed = 3.6      # units / second (was 0.06 per frame at 60 FPS)
 MAX_DT = 0.05           # clamp long frames (window drag, load hitch) so physics can't tunnel
 
+init_audio_device()
+music = load_music_stream("Music/ambience.wav")
+
 # ---------------- Models ----------------
 MODEL_POS = Vector3(0, 1, 0)
 
@@ -254,6 +257,8 @@ rl_set_line_width(2)
 colliding = False
 show_col = False
 
+play_music_stream(music)
+
 while not window_should_close():
     dt = min(get_frame_time(), MAX_DT)
     step = player_speed * dt    # distance moved this frame
@@ -322,6 +327,7 @@ while not window_should_close():
         colliding = False
         view_camera = camera
 
+    update_music_stream(music)
     begin_drawing()
     clear_background(RAYWHITE)
 
@@ -380,6 +386,9 @@ while not window_should_close():
     draw_fps(10, 145)
 
     end_drawing()
+
+stop_music_stream(music)
+unload_music_stream(music)
 
 unload_model(model)
 unload_model(col_model)
