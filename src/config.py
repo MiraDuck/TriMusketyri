@@ -54,13 +54,24 @@ VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness where no light reaches (0 = black)
 LIGHT_BANDS: float = 5.0     # cel-shading steps per light (higher = smoother)
-LIT_ENTITIES: set[str] = {"control_room", "lever", "valve"}   # drawn with the lighting shader; the rest is unlit
-# (position, colour, intensity, range, blinks per second; 0 = steady). At most 8. Lights shine through walls,
-# so keep the range inside the car.
+# Every car gets a ceiling lamp (Light.obj, which hangs down from its origin) with a light inside it.
+LAMP_MODEL: Path = MODELS_DIR / "Light.obj"
+LAMP_OFFSET: pr.Vector3 = pr.Vector3(0, 3.16, 0)   # where it hangs, relative to the car: under the ceiling beam
+LAMP_LIGHT_DROP: float = 0.5                        # its light sits this far below that, inside the shade
+LAMP_COLOR: pr.Color = pr.Color(255, 225, 190, 255)   # warm white
+LAMP_INTENSITY: float = 1.0
+LAMP_RANGE: float = 8.0
+# Extra lights: (position, colour, intensity, range, blinks per second; 0 = steady). At most 8 lights in total,
+# lamps included. Lights shine through walls, so keep the range inside the car.
 LIGHTS: list[tuple[pr.Vector3, pr.Color, float, float, float]] = [
-    (pr.Vector3(0, 4.25, 0), pr.Color(255, 225, 190, 255), 1.0, 8.0, 0.0),   # control room ceiling lamp
-    # (pr.Vector3(0, 4.25, -3), pr.RED, 1.0, 6.0, 1.0),                      # e.g. a red alarm light
+    # (pr.Vector3(0, 4.0, -3), pr.RED, 1.0, 6.0, 1.0),   # e.g. a red alarm light in the control room
 ]
+
+# ---------------- Vignette (src/vignette.py) ----------------
+VIGNETTE_COLOR: pr.Color = pr.Color(0, 0, 0, 255)
+VIGNETTE_STRENGTH: float = 0.85   # 0 = off, 1 = full colour in the corners
+VIGNETTE_RADIUS: float = 0.3      # darkening starts this far from the centre (0.5 = middle of the screen edges)
+VIGNETTE_SOFTNESS: float = 0.45   # and reaches full strength this much further out (the corners are at ~0.71)
 
 # ---------------- Interactables ----------------
 VALVE_TURN_SPEED: float = 0.5    # degrees per pixel of left / right mouse movement while holding a valve

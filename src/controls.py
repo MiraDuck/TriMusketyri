@@ -43,6 +43,8 @@ def handle_hotkeys(camera: pr.Camera3D, camera_mode: int, debug: DebugOptions) -
         debug.collision_meshes = not debug.collision_meshes
     if pr.is_key_pressed(pr.KeyboardKey.KEY_L):
         debug.unlit = not debug.unlit
+    if pr.is_key_pressed(pr.KeyboardKey.KEY_V):
+        debug.no_vignette = not debug.no_vignette
     if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
         pr.toggle_fullscreen()
     return camera_mode

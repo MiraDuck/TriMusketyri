@@ -1,7 +1,9 @@
-"""Lighting: dynamic cel-shaded point lights (Shaders/lit.vs + lit.fs).
+"""Lighting: dynamic cel-shaded point lights (Shaders/lit.vs + lit.fs) and the lamps they hang in.
 
-    lighting = Lighting([Light(pr.Vector3(0, 4.25, 0), pr.WHITE)])
+    lamp = Lamp("lamp_control_room", pr.Vector3(0, 4.16, 0))   # lamp model + its Light
+    lighting = Lighting([lamp.light])
     lighting.add(entity.model)      # this model is now lit
+    lamp.update(pr.get_time())      # every frame: lamp glows while its light is on
     lighting.update(pr.get_time())  # every frame, before drawing
 
 Only models passed to `add()` are lit; everything else draws with raylib's default (unlit) shader.
@@ -11,9 +13,14 @@ from __future__ import annotations
 
 import pyray as pr
 
-from .config import LIGHT_AMBIENT, LIGHT_BANDS, SHADERS_DIR
+from .config import (
+    LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE, LIGHT_AMBIENT, LIGHT_BANDS, SHADERS_DIR,
+)
+from .entity import Entity
 
 MAX_LIGHTS: int = 8   # keep in sync with MAX_LIGHTS in lit.fs
+LAMP_ON_TINT: pr.Color = pr.WHITE      # a shining lamp is drawn full bright, brighter than the lit room around it
+LAMP_OFF_TINT: pr.Color = pr.DARKGRAY
 
 
 class Light:
@@ -42,6 +49,27 @@ class Light:
         if not self.on or (self.blink and (time * self.blink) % 1.0 >= 0.5):
             return 0.0
         return self.intensity
+
+
+class Lamp(Entity):
+    """A ceiling lamp: the lamp model hanging from `pos` with its Light inside the shade (`.light`).
+    Don't add the lamp model to Lighting: it is the light source, so it is drawn unlit, full bright while its light
+    shines and dark while it is off (switched off, or the dark half of a blink). Not solid."""
+
+    def __init__(
+        self,
+        name: str,
+        pos: pr.Vector3,
+        color: pr.Color | tuple[int, int, int, int] = LAMP_COLOR,
+        intensity: float = LAMP_INTENSITY,
+        range: float = LAMP_RANGE,
+        blink: float = 0.0,
+    ) -> None:
+        super().__init__(name, LAMP_MODEL, pos)
+        self.light: Light = Light(pr.Vector3(pos.x, pos.y - LAMP_LIGHT_DROP, pos.z), color, intensity, range, blink)
+
+    def update(self, time: float) -> None:
+        self.tint = LAMP_ON_TINT if self.light.strength(time) > 0 else LAMP_OFF_TINT
 
 
 class Lighting:

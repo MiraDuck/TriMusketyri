@@ -23,7 +23,7 @@ def draw_entity(entity: Entity, camera: pr.Camera3D, debug: DebugOptions) -> Non
     show_mesh = debug.collision_meshes and collider is not None
     model = collider.model if show_mesh and collider else entity.model
 
-    pr.draw_model(model, entity.pos, 1.0, pr.LIGHTGRAY)
+    pr.draw_model(model, entity.pos, 1.0, entity.tint)
     if debug.wireframes:
         pr.draw_model_wires(model, entity.pos, 1.0, pr.RED if show_mesh else pr.BLACK)
     if debug.hitboxes:
@@ -87,7 +87,8 @@ def draw_hud(camera: pr.Camera3D, camera_mode: int, player: Player, debug: Debug
 
     text(f"{pr.get_fps()} FPS", 10, 145, size=20, color=pr.LIME)
     flags = [n for n, on in (("HITBOXES", debug.hitboxes), ("WIRES", debug.wireframes),
-                             ("COLLISION MESH", debug.collision_meshes), ("UNLIT", debug.unlit)) if on]
+                             ("COLLISION MESH", debug.collision_meshes), ("UNLIT", debug.unlit),
+                             ("NO VIGNETTE", debug.no_vignette)) if on]
     if flags:
         text("DEBUG: " + " + ".join(flags), 10, 165, color=pr.RED)
 

@@ -10,9 +10,10 @@ from src.debug import DebugOptions
 from src.entity import Entity
 from src.head_bob import HeadBob
 from src.interactable import Interactable, Lever, Valve
-from src.lighting import Light, Lighting
+from src.lighting import Lamp, Light, Lighting
 from src.player import Player
 from src.render import draw_hud, draw_scene
+from src.vignette import Vignette
 
 
 def drill_cars() -> list[Entity]:
@@ -45,17 +46,19 @@ def main() -> None:
     if config.START_MUSIC:
         audio.play_music(config.START_MUSIC)
 
+    cars = drill_cars()
+    lamps = [Lamp(f"lamp_{car.name}", pr.vector3_add(car.pos, config.LAMP_OFFSET)) for car in cars]
     valve = Valve("valve", config.VALVE_MODEL, config.VALVE_POS)
-    entities: list[Entity] = drill_cars() + [Lever("lever", config.LEVER_MODEL, config.LEVER_POS), valve]
+    interactables: list[Interactable] = [Lever("lever", config.LEVER_MODEL, config.LEVER_POS), valve]
+    entities: list[Entity] = [*cars, *lamps, *interactables]
     colliders = [e.collider for e in entities if e.collider is not None]
-    interactables = [e for e in entities if isinstance(e, Interactable)]
     held: Interactable | None = None   # what the player is holding (a valve), None = mouse look is on
 
-    lighting = Lighting([Light(*light) for light in config.LIGHTS])
-    for entity in entities:
-        if entity.name in config.LIT_ENTITIES:
-            lighting.add(entity.model)
+    lighting = Lighting([lamp.light for lamp in lamps] + [Light(*light) for light in config.LIGHTS])
+    for entity in [*cars, *interactables]:   # not the lamps: they are the light, drawn unlit
+        lighting.add(entity.model)
 
+    vignette = Vignette()
     player = Player(camera)
     bob = HeadBob()
     debug = DebugOptions()
@@ -92,17 +95,23 @@ def main() -> None:
             view_camera = camera
 
         # ---- draw ----
+        now = pr.get_time()
+        for lamp in lamps:
+            lamp.update(now)
         lighting.set_enabled(not debug.unlit)
-        lighting.update(pr.get_time())
+        lighting.update(now)
         pr.begin_drawing()
         pr.clear_background(pr.RAYWHITE)
         draw_scene(view_camera, camera, player, entities, lighting.lights, debug)
+        if not debug.no_vignette:
+            vignette.draw()   # after the scene, before the HUD so the HUD stays readable
         draw_hud(camera, camera_mode, player, debug)
         pr.end_drawing()
 
     for entity in entities:
         entity.unload()
     lighting.unload()
+    vignette.unload()
     audio.unload()
     pr.close_window()
 

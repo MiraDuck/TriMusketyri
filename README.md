@@ -1,2 +1,2 @@
-# TriMusketyri
+# Project Core
 Description
