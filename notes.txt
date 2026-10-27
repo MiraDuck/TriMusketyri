@@ -5,24 +5,30 @@
 lokomotiva
     monitor (tlak, teplota, energie, vzduch, signal)
     mapa
-    comms 
+    comms
+    start klicek
 
-tanky
+plynovna
+    tanky
     control (vzduch)
+    chladici kapalina
 
 free room
     minihry (sanita)
         piskvorky
         connect 4
         pexeso
+    postel (sanita)
 
 trubky
     control (tlak)
 
 kotelna
+    pec
     monitor (teplota)
 
 engine
+    motor
     control (energie)
     control (teplota)
 
