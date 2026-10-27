@@ -33,7 +33,7 @@ mode_names = {
 MODEL_POS = Vector3(0, 1, 0)
 
 model = load_model("Models/test.obj")                 # what you see
-col_model = load_model("Models/navmesh.obj")   # what you hit (rename to your file)
+col_model = load_model("Models/navmesh.obj")   # what you hit
 
 col_bb = get_model_bounding_box(col_model)
 world_bb = BoundingBox(
@@ -115,6 +115,31 @@ def cast_model(origin, direction, accept, max_skips=4):
 
 on_ground = False
 
+GRAVITY = 25.0         # units / s^2
+MAX_FALL_SPEED = 15.0  # kept below STEP_UP per frame so we can't tunnel through floors
+WORLD_FLOOR_Y = 0.0    # fallback floor (the drawn plane) outside the collision model
+vel_y = 0.0
+
+
+def apply_gravity(cam, dt):
+    """Pull the player down; resolve_collision() then pushes them back onto the floor."""
+    global vel_y
+    vel_y = max(vel_y - GRAVITY * dt, -MAX_FALL_SPEED)
+    dy = vel_y * dt
+    cam.position = Vector3(cam.position.x, cam.position.y + dy, cam.position.z)
+    cam.target = Vector3(cam.target.x, cam.target.y + dy, cam.target.z)
+
+
+def land_on_world_floor(cam):
+    """Stop the player at WORLD_FLOOR_Y if the collision model didn't catch them."""
+    global on_ground
+    feet = cam.position.y - EYE_TO_CENTER - PLAYER_HALF.y
+    if feet < WORLD_FLOOR_Y:
+        lift = WORLD_FLOOR_Y - feet
+        cam.position = Vector3(cam.position.x, cam.position.y + lift, cam.position.z)
+        cam.target = Vector3(cam.target.x, cam.target.y + lift, cam.target.z)
+        on_ground = True
+
 
 def resolve_collision(cam):
     """Push the camera out of the collision model. Returns True if touching it."""
@@ -170,6 +195,52 @@ def resolve_collision(cam):
     return touched
 
 
+# ---------------- Head bob (from bob_example.c) ----------------
+# Purely visual: applied to a copy of the camera used for drawing, so the
+# player's real position (and therefore collision / y) is never affected.
+BOB_SIDE = 0.1          # sideways sway
+STEP_ROTATION = 0.01    # roll while walking
+WALK_FOV_DELTA = -5.0   # fov change while walking
+
+head_timer = 0.0
+walk_lerp = 0.0
+fov_offset = 0.0
+lean_x = 0.0
+lean_y = 0.0
+
+
+def update_bob(moving, sideway, forward, dt):
+    global head_timer, walk_lerp, fov_offset, lean_x, lean_y
+    if moving:
+        head_timer += dt * 3.0
+        walk_lerp += (1.0 - walk_lerp) * min(1.0, 10.0 * dt)
+        fov_offset += (WALK_FOV_DELTA - fov_offset) * min(1.0, 5.0 * dt)
+    else:
+        walk_lerp += (0.0 - walk_lerp) * min(1.0, 10.0 * dt)
+        fov_offset += (0.0 - fov_offset) * min(1.0, 5.0 * dt)
+    lean_x += (sideway * 0.02 - lean_x) * min(1.0, 10.0 * dt)
+    lean_y += (forward * 0.015 - lean_y) * min(1.0, 10.0 * dt)
+
+
+def bob_camera(cam):
+    """Return a copy of cam with the bob effects applied (y is left untouched)."""
+    fwd = vector3_normalize(vector3_subtract(cam.target, cam.position))
+    right = vector3_normalize(vector3_cross_product(fwd, Vector3(0, 1, 0)))
+    head_sin = math.sin(head_timer * math.pi)
+
+    # sway sideways only; no vertical offset
+    sway = vector3_scale(right, head_sin * BOB_SIDE * walk_lerp)
+    pos = vector3_add(cam.position, sway)
+
+    look = vector3_rotate_by_axis_angle(fwd, right, -lean_y)
+    up = vector3_rotate_by_axis_angle(Vector3(0, 1, 0), look, head_sin * STEP_ROTATION + lean_x)
+
+    fovy = cam.fovy
+    if cam.projection == CameraProjection.CAMERA_PERSPECTIVE:
+        fovy += fov_offset
+    return Camera3D(pos, vector3_add(pos, look), up, fovy, cam.projection)
+
+
 rl_set_line_width(2)
 colliding = False
 show_col = False
@@ -213,6 +284,7 @@ while not window_should_close():
                 (is_key_down(KeyboardKey.KEY_S) or is_key_down(KeyboardKey.KEY_DOWN))*0.1,
                 (is_key_down(KeyboardKey.KEY_D) or is_key_down(KeyboardKey.KEY_RIGHT))*0.1 -
                 (is_key_down(KeyboardKey.KEY_A) or is_key_down(KeyboardKey.KEY_LEFT))*0.1,
+                0.0 if camera_mode == CameraMode.CAMERA_FIRST_PERSON else
                 (is_key_down(KeyboardKey.KEY_SPACE) - is_key_down(KeyboardKey.KEY_LEFT_SHIFT))*0.1
             ),
             (
@@ -223,14 +295,25 @@ while not window_should_close():
             get_mouse_wheel_move()*2.0)
 
     if camera_mode == CameraMode.CAMERA_FIRST_PERSON:
+        apply_gravity(camera, get_frame_time())
         colliding = resolve_collision(camera)
+        land_on_world_floor(camera)
+        if on_ground:
+            vel_y = 0.0
+        sideway = (is_key_down(KeyboardKey.KEY_D) or is_key_down(KeyboardKey.KEY_RIGHT)) - \
+                  (is_key_down(KeyboardKey.KEY_A) or is_key_down(KeyboardKey.KEY_LEFT))
+        forward = (is_key_down(KeyboardKey.KEY_W) or is_key_down(KeyboardKey.KEY_UP)) - \
+                  (is_key_down(KeyboardKey.KEY_S) or is_key_down(KeyboardKey.KEY_DOWN))
+        update_bob(sideway != 0 or forward != 0, sideway, forward, get_frame_time())
+        view_camera = bob_camera(camera)
     else:
         colliding = False
+        view_camera = camera
 
     begin_drawing()
     clear_background(RAYWHITE)
 
-    begin_mode_3d(camera)
+    begin_mode_3d(view_camera)
 
     draw_plane(Vector3(0.0, 0.0, 0.0), Vector2(32.0, 32.0), LIGHTGRAY)
     draw_cube(Vector3(-16.0, 2.5, 0.0), 1.0, 5.0, 32.0, BLUE)
@@ -242,10 +325,11 @@ while not window_should_close():
         draw_cube(camera.target, 0.5, 0.5, 0.5, PURPLE)
         draw_cube_wires(camera.target, 0.5, 0.5, 0.5, DARKPURPLE)
 
-    draw_model(model, MODEL_POS, 1.0, WHITE)
-    draw_model_wires(model, MODEL_POS, 1.0, BLACK)
-    draw_bounding_box(world_bb, GREEN)
-    if show_col:
+    if not show_col:
+        draw_model(model, MODEL_POS, 1.0, WHITE)
+        draw_model_wires(model, MODEL_POS, 1.0, BLACK)
+        draw_bounding_box(world_bb, GREEN)
+    else:
         draw_model(col_model, MODEL_POS, 1.0, WHITE)
         draw_model_wires(col_model, MODEL_POS, 1.0, RED)
 
