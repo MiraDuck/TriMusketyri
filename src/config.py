@@ -14,6 +14,14 @@ SHADERS_DIR: Path = ROOT / "Shaders"
 START_MUSIC: str = "ambience.wav"    # file in AMBIENCE_DIR played on launch ("" = none)
 MUSIC_VOLUME: float = 1.0
 SFX_VOLUME: float = 1.0
+# Looping sounds placed in the world: (file in SFX/, position, volume, near, far, floor). Full volume within `near`
+# units of the player, fading smoothly to `floor` (fraction of the volume that is always heard; 0 = silent) at
+# `far`. Walls don't block sound, so set `far` to where it should be gone. Cars are 8 long: the control room is
+# z -4..4, the next car z -4..-12, and so on.
+SOUND_SOURCES: list[tuple[str, pr.Vector3, float, float, float, float]] = [
+    # drill engine in front of the control room: loud there, then a steady 30 % through the whole drill
+    ("DrillDoingWhateverDrillsDoButWithTheSoundOfEngine.wav", pr.Vector3(0, 3, 8), 1.0, 6.0, 14.0, 0.2),
+]
 
 # ---------------- Window / timing ----------------
 SCREEN_W: int = 1600
@@ -39,7 +47,7 @@ ROOM_MODEL: Path = MODELS_DIR / "Room.obj"
 ROOM_COLLISION: Path = MODELS_DIR / "Room_Navmesh.obj"
 DRILL_CARS: list[tuple[str, Path, Path]] = [
     ("control_room", MODELS_DIR / "Control_Room.obj", MODELS_DIR / "Control_Room_Navmesh.obj"),
-    ("room_1", ROOM_MODEL, ROOM_COLLISION),
+    ("rest_room", MODELS_DIR / "Rest_Room.obj", MODELS_DIR / "Rest_Room_Navmesh.obj"),
     ("oxygen_room", MODELS_DIR / "Oxygen_Room.obj", MODELS_DIR / "Oxygen_Room_Navmesh.obj"),
     ("room_2", ROOM_MODEL, ROOM_COLLISION),
     ("room_3", ROOM_MODEL, ROOM_COLLISION),
@@ -58,7 +66,7 @@ LIGHT_BANDS: float = 5.0     # cel-shading steps per light (higher = smoother)
 LAMP_MODEL: Path = MODELS_DIR / "Light.obj"
 LAMP_OFFSET: pr.Vector3 = pr.Vector3(0, 3.16, 0)   # where it hangs, relative to the car: under the ceiling beam
 LAMP_LIGHT_DROP: float = 0.5                        # its light sits this far below that, inside the shade
-LAMP_COLOR: pr.Color = pr.Color(255, 225, 190, 255)   # warm white
+LAMP_COLOR: pr.Color = pr.Color(230, 175, 48, 255)   # warm white
 LAMP_INTENSITY: float = 1.0
 LAMP_RANGE: float = 8.0
 # Extra lights: (position, colour, intensity, range, blinks per second; 0 = steady). At most 8 lights in total,

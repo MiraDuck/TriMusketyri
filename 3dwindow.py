@@ -45,6 +45,8 @@ def main() -> None:
     audio = Audio(config.AMBIENCE_DIR)
     if config.START_MUSIC:
         audio.play_music(config.START_MUSIC)
+    for filename, pos, volume, near, far, floor in config.SOUND_SOURCES:
+        audio.add_source(filename, pos, volume, near, far, floor)
 
     cars = drill_cars()
     lamps = [Lamp(f"lamp_{car.name}", pr.vector3_add(car.pos, config.LAMP_OFFSET)) for car in cars]
@@ -68,7 +70,7 @@ def main() -> None:
 
     while not pr.window_should_close():
         dt: float = min(pr.get_frame_time(), config.MAX_DT)
-        audio.update()
+        audio.update(camera)   # the real camera is the listener (sources get their volume / pan from it)
 
         # ---- input ----
         camera_mode = handle_hotkeys(camera, camera_mode, debug)

@@ -47,7 +47,7 @@ class Entity:
     ) -> None:
         self.name: str = name
         self.pos: pr.Vector3 = pos
-        self.tint: pr.Color = pr.LIGHTGRAY   # colour the model is drawn with (multiplies its texture)
+        self.tint: pr.Color = pr.WHITE   # colour the model is drawn with (multiplies its texture)
         warn_big_mtl(model_path)
         self.model: pr.Model = pr.load_model(str(model_path))
         self.collider: MeshCollider | None = (
