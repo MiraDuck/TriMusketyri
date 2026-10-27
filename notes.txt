@@ -3,7 +3,7 @@
 ############
 
 lokomotiva
-    monitor (tlak, teplota, energie, vzduch, signal)
+    monitor (tlak, teplota, energie, vzduch, signal, hloubka)
     mapa
     comms
     start klicek
