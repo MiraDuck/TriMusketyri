@@ -1,29 +1,46 @@
-"""Collision model: ray casts against a mesh placed in the world."""
-from pyray import *
+"""Collision: ray casts against a mesh placed in the world."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Callable
+
+import pyray as pr
+
+NormalTest = Callable[[pr.Vector3], bool]
 
 
-def is_floor(n):   return n.y > 0.5            # faces up
-def is_ceiling(n): return n.y < -0.5           # faces down
-def is_wall(n):    return abs(n.y) < 0.5       # steep
+def is_floor(n: pr.Vector3) -> bool:   return n.y > 0.5            # faces up
+def is_ceiling(n: pr.Vector3) -> bool: return n.y < -0.5           # faces down
+def is_wall(n: pr.Vector3) -> bool:    return abs(n.y) < 0.5       # steep
 
 
-class CollisionWorld:
-    """Needs an open window (load_model requires a GL context)."""
+def world_bounds(model: pr.Model, pos: pr.Vector3) -> pr.BoundingBox:
+    """A model's bounding box moved to where the model sits in the world."""
+    bb = pr.get_model_bounding_box(model)
+    return pr.BoundingBox(
+        pr.Vector3(bb.min.x + pos.x, bb.min.y + pos.y, bb.min.z + pos.z),
+        pr.Vector3(bb.max.x + pos.x, bb.max.y + pos.y, bb.max.z + pos.z),
+    )
 
-    def __init__(self, path, pos):
-        self.pos = pos
-        self.model = load_model(str(path))
 
-        bb = get_model_bounding_box(self.model)
-        self.bounds = BoundingBox(
-            Vector3(bb.min.x + pos.x, bb.min.y + pos.y, bb.min.z + pos.z),
-            Vector3(bb.max.x + pos.x, bb.max.y + pos.y, bb.max.z + pos.z),
-        )
+class MeshCollider:
+    """A collision mesh placed in the world. Needs an open window (load_model needs a GL context)."""
 
-    def unload(self):
-        unload_model(self.model)
+    def __init__(self, path: str | Path, pos: pr.Vector3) -> None:
+        self.pos: pr.Vector3 = pos
+        self.model: pr.Model = pr.load_model(str(path))
+        self.bounds: pr.BoundingBox = world_bounds(self.model, pos)
 
-    def cast(self, origin, direction, accept, max_skips=4):
+    def unload(self) -> None:
+        pr.unload_model(self.model)
+
+    def cast(
+        self,
+        origin: pr.Vector3,
+        direction: pr.Vector3,
+        accept: NormalTest,
+        max_skips: int = 4,
+    ) -> pr.Vector3 | None:
         """
         Closest hit on the model whose triangle normal passes accept(normal).
         Returns the hit point in world space, or None.
@@ -37,17 +54,17 @@ class CollisionWorld:
         oz = origin.z - self.pos.z
 
         for _ in range(max_skips + 1):
-            ray = Ray(Vector3(ox, oy, oz), direction)
+            ray = pr.Ray(pr.Vector3(ox, oy, oz), direction)
             best = None
             for i in range(self.model.meshCount):
-                hit = get_ray_collision_mesh(ray, self.model.meshes[i], matrix_identity())
+                hit = pr.get_ray_collision_mesh(ray, self.model.meshes[i], pr.matrix_identity())
                 if hit.hit and (best is None or hit.distance < best.distance):
                     best = hit
             if best is None:
                 return None
             if accept(best.normal):
                 p = best.point
-                return Vector3(p.x + self.pos.x, p.y + self.pos.y, p.z + self.pos.z)
+                return pr.Vector3(p.x + self.pos.x, p.y + self.pos.y, p.z + self.pos.z)
             # wrong kind of triangle: continue from just past it
             ox = best.point.x + direction.x * 0.01
             oy = best.point.y + direction.y * 0.01
