@@ -3,30 +3,23 @@ from pyray import *
 
 MAX_COLUMNS = 20
 
-SCREEN_W = 800
-SCREEN_H = 450
+SCREEN_W = 1600
+SCREEN_H = 900
 
+set_trace_log_level(TraceLogLevel.LOG_WARNING)
 init_window(SCREEN_W, SCREEN_H, "raylib [core] example - 3d camera first person")
 
+toggle_fullscreen()
+
 camera = Camera3D(
-    Vector3(0.0, 2.0, 4.0),   # position
-    Vector3(0.0, 2.0, 0.0),   # target
+    Vector3(0.0, 2.5, 4.0),   # position
+    Vector3(0.0, 2.5, 0.0),   # target
     Vector3(0.0, 1.0, 0.0),   # up
     60.0,                     # fovy
     CameraProjection.CAMERA_PERSPECTIVE,       # projection
 )
 
 camera_mode = CameraMode.CAMERA_FIRST_PERSON
-
-# Random columns
-heights = []
-positions = []
-colors = []
-for _ in range(MAX_COLUMNS):
-    h = float(get_random_value(1, 12))
-    heights.append(h)
-    positions.append(Vector3(float(get_random_value(-15, 15)), h / 2.0, float(get_random_value(-15, 15))))
-    colors.append(Color(get_random_value(20, 255), get_random_value(10, 55), 30, 255))
 
 disable_cursor()
 set_target_fps(60)
@@ -37,6 +30,20 @@ mode_names = {
     CameraMode.CAMERA_THIRD_PERSON: "THIRD_PERSON",
     CameraMode.CAMERA_ORBITAL: "ORBITAL",
 }
+
+model = load_model("test.obj")
+print(is_model_valid(model))   # older raylib versions: is_model_ready
+
+print("meshes:", model.meshCount, "materials:", model.materialCount)
+for i in range(model.meshCount):
+    m = model.meshes[i]
+    print(i, "verts:", m.vertexCount, "tris:", m.triangleCount)
+
+bb = get_model_bounding_box(model)
+print("min:", bb.min.x, bb.min.y, bb.min.z)
+print("max:", bb.max.x, bb.max.y, bb.max.z)
+
+rl_set_line_width(2)
 
 while not window_should_close():
     # ---- Update ----
@@ -83,14 +90,15 @@ while not window_should_close():
     draw_cube(Vector3(-16.0, 2.5, 0.0), 1.0, 5.0, 32.0, BLUE)
     draw_cube(Vector3(16.0, 2.5, 0.0), 1.0, 5.0, 32.0, LIME)
     draw_cube(Vector3(0.0, 2.5, 16.0), 32.0, 5.0, 1.0, GOLD)
-
-    for i in range(MAX_COLUMNS):
-        draw_cube(positions[i], 2.0, heights[i], 2.0, colors[i])
-        draw_cube_wires(positions[i], 2.0, heights[i], 2.0, MAROON)
+    draw_cube(Vector3(0.0, 2.5, -16.0), 32.0, 5.0, 1.0, RED)
 
     if camera_mode == CameraMode.CAMERA_THIRD_PERSON:
         draw_cube(camera.target, 0.5, 0.5, 0.5, PURPLE)
         draw_cube_wires(camera.target, 0.5, 0.5, 0.5, DARKPURPLE)
+
+    draw_model(model, Vector3(0, 1, 0), 1.0, WHITE)
+    draw_model_wires(model, Vector3(0, 1, 0), 1.0, BLACK)
+    draw_bounding_box(bb, GREEN)
 
     end_mode_3d()
 
