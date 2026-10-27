@@ -49,8 +49,8 @@ DRILL_CARS: list[tuple[str, Path, Path]] = [
     ("control_room", MODELS_DIR / "Control_Room.obj", MODELS_DIR / "Control_Room_Navmesh.obj"),
     ("rest_room", MODELS_DIR / "Rest_Room.obj", MODELS_DIR / "Rest_Room_Navmesh.obj"),
     ("oxygen_room", MODELS_DIR / "Oxygen_Room.obj", MODELS_DIR / "Oxygen_Room_Navmesh.obj"),
-    ("room_2", ROOM_MODEL, ROOM_COLLISION),
-    ("room_3", ROOM_MODEL, ROOM_COLLISION),
+    ("storage_room", MODELS_DIR / "Storage_Room.obj", MODELS_DIR / "Storage_Room_Navmesh.obj"),
+    ("engine_room", MODELS_DIR / "Engine_Room.obj", MODELS_DIR / "Engine_Room_Navmesh.obj"),
 ]
 
 # ---------------- Models ----------------
@@ -58,6 +58,11 @@ LEVER_MODEL: Path = MODELS_DIR / "lever.obj"
 LEVER_POS: pr.Vector3 = pr.Vector3(0, 2, 0)
 VALVE_MODEL: Path = MODELS_DIR / "Valve.obj"
 VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
+# Dials (src/dial.py) are modelled in place in their room, so they are placed at the car's position.
+TEMP_PRESSURE_DIAL_MODEL: Path = MODELS_DIR / "Temperature_Pressure.glb"   # needle on the control room console
+TEMP_PRESSURE_RANGE: tuple[float, float] = (0.0, 100.0)   # value at the modelled needle pose, value at full sweep
+TEMP_PRESSURE_SWEEP: float = 360.0                        # degrees the needle travels from low to high
+DIAL_NEEDLE_SPEED: float = 4.0   # how fast needles follow their value (higher = snappier, ~1/s to settle)
 
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness where no light reaches (0 = black)

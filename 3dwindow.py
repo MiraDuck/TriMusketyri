@@ -1,12 +1,15 @@
 """Entry point. Run from anywhere: python 3dwindow.py"""
 from __future__ import annotations
 
+import random
+
 import pyray as pr
 
 from src import config
 from src.audio import Audio
 from src.controls import handle_hotkeys, handle_interaction, move_axes, move_camera
 from src.debug import DebugOptions
+from src.dial import Dial
 from src.entity import Entity
 from src.head_bob import HeadBob
 from src.interactable import Interactable, Lever, Valve
@@ -52,12 +55,15 @@ def main() -> None:
     lamps = [Lamp(f"lamp_{car.name}", pr.vector3_add(car.pos, config.LAMP_OFFSET)) for car in cars]
     valve = Valve("valve", config.VALVE_MODEL, config.VALVE_POS)
     interactables: list[Interactable] = [Lever("lever", config.LEVER_MODEL, config.LEVER_POS), valve]
-    entities: list[Entity] = [*cars, *lamps, *interactables]
+    dial = Dial("temp_pressure", config.TEMP_PRESSURE_DIAL_MODEL, cars[0].pos, *config.TEMP_PRESSURE_RANGE,
+                sweep=config.TEMP_PRESSURE_SWEEP)
+    dials = [dial]
+    entities: list[Entity] = [*cars, *lamps, *interactables, *dials]
     colliders = [e.collider for e in entities if e.collider is not None]
     held: Interactable | None = None   # what the player is holding (a valve), None = mouse look is on
 
     lighting = Lighting([lamp.light for lamp in lamps] + [Light(*light) for light in config.LIGHTS])
-    for entity in [*cars, *interactables]:   # not the lamps: they are the light, drawn unlit
+    for entity in [*cars, *interactables, *dials]:   # not the lamps: they are the light, drawn unlit
         lighting.add(entity.model)
 
     vignette = Vignette()
@@ -65,6 +71,7 @@ def main() -> None:
     bob = HeadBob()
     debug = DebugOptions()
     valve_break_at = config.VALVE_BREAK_TEST_AT
+    dial_test_at = 0.0   # TEST (remove): next time the dial gets a new random value
 
     pr.rl_set_line_width(2)
 
@@ -83,8 +90,15 @@ def main() -> None:
         if valve_break_at is not None and pr.get_time() >= valve_break_at:
             valve.spin = config.VALVE_BREAK_SPIN   # degrees / s; positive opens, negative closes
             valve_break_at = None
+        # TEST (remove): every 0.5-2 s the dial's value goes up or down by up to 30
+        if pr.get_time() >= dial_test_at:
+            dial.value = min(max(dial.value + random.uniform(-3.0, 3.0),
+                                 dial.low), dial.high)
+            dial_test_at = pr.get_time() + 0.1# random.uniform(0.5, 2.0)
         for interactable in interactables:
             interactable.update(dt)
+        for d in dials:
+            d.update(dt)
 
         # ---- player ----
         if camera_mode == pr.CameraMode.CAMERA_FIRST_PERSON:

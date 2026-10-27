@@ -9,12 +9,10 @@ button is held (mouse look is off meanwhile) and `release()`.
 """
 from __future__ import annotations
 
-import math
-
 import pyray as pr
 
 from .config import VALVE_TURN_SPEED
-from .entity import Entity
+from .entity import Entity, rotation_about
 
 
 class Interactable(Entity):
@@ -96,11 +94,4 @@ class Valve(Interactable):
     def update(self, dt: float) -> None:
         if self.spin:
             self.turn(self.spin * dt)
-        # Rotate about the pivot, not the model's origin: move the pivot to the origin, rotate, move it back.
-        # raylib's matrix_multiply(a, b) applies a first, then b. draw_model applies model.transform before `pos`.
-        p = self.pivot
-        self.model.transform = pr.matrix_multiply(
-            pr.matrix_multiply(pr.matrix_translate(-p.x, -p.y, -p.z),
-                               pr.matrix_rotate(self.axis, math.radians(self.angle))),
-            pr.matrix_translate(p.x, p.y, p.z),
-        )
+        self.model.transform = rotation_about(self.pivot, self.axis, self.angle)

@@ -10,6 +10,7 @@ Hitbox:
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pyray as pr
@@ -33,6 +34,17 @@ def warn_big_mtl(model_path: str | Path) -> None:
                     print(f"WARNING: {mtl.name} ({path.name}) has {count} materials; raylib may hang on "
                           f"{MTL_HANG_RISK}+. Remove the unused ones in Blender.", flush=True)
             return
+
+
+def rotation_about(pivot: pr.Vector3, axis: pr.Vector3, degrees: float) -> pr.Matrix:
+    """A model.transform turning a model `degrees` about `axis` through `pivot` (model space) instead of its origin:
+    move the pivot to the origin, rotate, move it back. raylib's matrix_multiply(a, b) applies a first, then b;
+    draw_model applies model.transform before the entity's `pos`."""
+    p = pivot
+    return pr.matrix_multiply(
+        pr.matrix_multiply(pr.matrix_translate(-p.x, -p.y, -p.z), pr.matrix_rotate(axis, math.radians(degrees))),
+        pr.matrix_translate(p.x, p.y, p.z),
+    )
 
 
 class Entity:
