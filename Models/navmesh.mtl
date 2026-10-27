@@ -9,7 +9,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd wall.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Blender/wall.png
 
 newmtl Material.001
 Ns 250.000000
@@ -19,7 +19,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd bloody_rust.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Blender/bloody_rust.png
 
 newmtl Material.002
 Ns 250.000000
@@ -29,4 +29,4 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd metal.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Blender/metal.png
