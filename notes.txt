@@ -1,0 +1,47 @@
+############
+## VAGONY ##
+############
+
+lokomotiva
+    monitor (tlak, teplota, energie, vzduch, signal)
+    mapa
+    comms 
+
+tanky
+    control (vzduch)
+
+free room
+    minihry (sanita)
+
+trubky
+    control (tlak)
+
+kotelna
+    control (teplota)
+
+
+###############
+## KONTROLKY ##
+###############
+
+teplota
+tlak
+vzduch
+energie
+sanita
+signal
+
+
+###########
+## SMRTI ##
+###########
+
+fatigue
+    teplota, vzduch
+
+malfunction
+    tlak, energie
+
+insanity
+    sanita
+
