@@ -3,27 +3,29 @@
 Purely visual: apply() returns a copy of the camera for drawing, so the
 player's real position (and therefore collision / y) is never affected.
 """
+from __future__ import annotations
+
 import math
 
-from pyray import *
+import pyray as pr
 
 from .config import BOB_SIDE, STEP_ROTATION, WALK_FOV_DELTA
 
 
-def smooth(rate, dt):
+def smooth(rate: float, dt: float) -> float:
     """Frame-rate independent lerp factor (same easing at any FPS)."""
     return 1.0 - math.exp(-rate * dt)
 
 
 class HeadBob:
-    def __init__(self):
-        self.head_timer = 0.0
-        self.walk_lerp = 0.0
-        self.fov_offset = 0.0
-        self.lean_x = 0.0
-        self.lean_y = 0.0
+    def __init__(self) -> None:
+        self.head_timer: float = 0.0
+        self.walk_lerp: float = 0.0
+        self.fov_offset: float = 0.0
+        self.lean_x: float = 0.0
+        self.lean_y: float = 0.0
 
-    def update(self, moving, sideway, forward, dt):
+    def update(self, moving: bool, sideway: float, forward: float, dt: float) -> None:
         if moving:
             self.head_timer += dt * 3.0
             self.walk_lerp += (1.0 - self.walk_lerp) * smooth(10.0, dt)
@@ -34,21 +36,21 @@ class HeadBob:
         self.lean_x += (sideway * 0.02 - self.lean_x) * smooth(10.0, dt)
         self.lean_y += (forward * 0.015 - self.lean_y) * smooth(10.0, dt)
 
-    def apply(self, cam):
+    def apply(self, cam: pr.Camera3D) -> pr.Camera3D:
         """Return a copy of cam with the bob effects applied (y is left untouched)."""
-        fwd = vector3_normalize(vector3_subtract(cam.target, cam.position))
-        right = vector3_normalize(vector3_cross_product(fwd, Vector3(0, 1, 0)))
+        fwd = pr.vector3_normalize(pr.vector3_subtract(cam.target, cam.position))
+        right = pr.vector3_normalize(pr.vector3_cross_product(fwd, pr.Vector3(0, 1, 0)))
         head_sin = math.sin(self.head_timer * math.pi)
 
         # sway sideways only; no vertical offset
-        sway = vector3_scale(right, head_sin * BOB_SIDE * self.walk_lerp)
-        pos = vector3_add(cam.position, sway)
+        sway = pr.vector3_scale(right, head_sin * BOB_SIDE * self.walk_lerp)
+        pos = pr.vector3_add(cam.position, sway)
 
-        look = vector3_rotate_by_axis_angle(fwd, right, -self.lean_y)
-        up = vector3_rotate_by_axis_angle(
-            Vector3(0, 1, 0), look, head_sin * STEP_ROTATION + self.lean_x)
+        look = pr.vector3_rotate_by_axis_angle(fwd, right, -self.lean_y)
+        up = pr.vector3_rotate_by_axis_angle(
+            pr.Vector3(0, 1, 0), look, head_sin * STEP_ROTATION + self.lean_x)
 
         fovy = cam.fovy
-        if cam.projection == CameraProjection.CAMERA_PERSPECTIVE:
+        if cam.projection == pr.CameraProjection.CAMERA_PERSPECTIVE:
             fovy += self.fov_offset
-        return Camera3D(pos, vector3_add(pos, look), up, fovy, cam.projection)
+        return pr.Camera3D(pos, pr.vector3_add(pos, look), up, fovy, cam.projection)
