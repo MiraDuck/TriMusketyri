@@ -12,11 +12,18 @@ tanky
 
 free room
     minihry (sanita)
+        piskvorky
+        connect 4
+        pexeso
 
 trubky
     control (tlak)
 
 kotelna
+    monitor (teplota)
+
+engine
+    control (energie)
     control (teplota)
 
 
