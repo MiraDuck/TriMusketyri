@@ -1,18 +1,19 @@
 """Keyboard / mouse input."""
 from __future__ import annotations
 
+from typing import Iterable
+
 import pyray as pr
 
 from .config import MOUSE_SENSITIVITY, PLAYER_SPEED, ZOOM_SPEED
 from .debug import DebugOptions
+from .interactable import Interactable
 
 UP_VECTOR: pr.Vector3 = pr.Vector3(0.0, 1.0, 0.0)
 
 MODE_KEYS: dict[int, int] = {
     pr.KeyboardKey.KEY_ONE: pr.CameraMode.CAMERA_FREE,
     pr.KeyboardKey.KEY_TWO: pr.CameraMode.CAMERA_FIRST_PERSON,
-    # pr.KeyboardKey.KEY_THREE: pr.CameraMode.CAMERA_THIRD_PERSON,
-    # pr.KeyboardKey.KEY_FOUR: pr.CameraMode.CAMERA_ORBITAL,
 }
 
 
@@ -40,40 +41,61 @@ def handle_hotkeys(camera: pr.Camera3D, camera_mode: int, debug: DebugOptions) -
         debug.wireframes = not debug.wireframes
     if pr.is_key_pressed(pr.KeyboardKey.KEY_C):
         debug.collision_meshes = not debug.collision_meshes
+    if pr.is_key_pressed(pr.KeyboardKey.KEY_L):
+        debug.unlit = not debug.unlit
+    if pr.is_key_pressed(pr.KeyboardKey.KEY_V):
+        debug.no_vignette = not debug.no_vignette
     if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
         pr.toggle_fullscreen()
-
-    # if pr.is_key_pressed(pr.KeyboardKey.KEY_P):
-    #     if camera.projection == pr.CameraProjection.CAMERA_PERSPECTIVE:
-    #         camera_mode = pr.CameraMode.CAMERA_THIRD_PERSON
-    #         camera.target = pr.Vector3(0.0, 2.0, 0.0)
-    #         camera.position = pr.Vector3(50.0, 2.0 + 100.0 * math.sin(math.radians(45)), 50.0)
-    #         camera.up = UP_VECTOR
-    #         camera.projection = pr.CameraProjection.CAMERA_ORTHOGRAPHIC
-    #         camera.fovy = 20.0
-    #     elif camera.projection == pr.CameraProjection.CAMERA_ORTHOGRAPHIC:
-    #         camera_mode = pr.CameraMode.CAMERA_THIRD_PERSON
-    #         camera.position = pr.Vector3(0.0, 2.0, 10.0)
-    #         camera.target = pr.Vector3(0.0, 2.0, 0.0)
-    #         camera.up = UP_VECTOR
-    #         camera.projection = pr.CameraProjection.CAMERA_PERSPECTIVE
-    #         camera.fovy = 60.0
     return camera_mode
 
 
-def move_camera(camera: pr.Camera3D, camera_mode: int, dt: float) -> None:
-    """Apply movement + mouse look. Space/Shift move vertically except in first person (gravity)."""
+def handle_interaction(
+    camera: pr.Camera3D,
+    interactables: Iterable[Interactable],
+    held: Interactable | None,
+) -> Interactable | None:
+    """Left click uses the interactable you are looking at (the closest, if several).
+    A grabbable one stays held while the button is down and gets the mouse movement.
+    Returns what is held now (None = nothing, mouse look is on)."""
+    left = pr.MouseButton.MOUSE_BUTTON_LEFT
+    if held is not None:
+        # keep holding while the button is down and you still look at it; walking / looking away lets go
+        if pr.is_mouse_button_down(left) and held.is_targeted(camera):
+            held.drag(pr.get_mouse_delta())
+            return held
+        held.release()
+        return None
+
+    if not pr.is_mouse_button_pressed(left):
+        return None
+    targeted = [i for i in interactables if i.is_targeted(camera)]
+    if not targeted:
+        return None
+    target = min(targeted, key=lambda i: pr.vector3_distance(camera.position, i.pos))
+    if target.grabbable:
+        target.grab(camera)
+        return target
+    target.interact()
+    return None
+
+
+def move_camera(camera: pr.Camera3D, camera_mode: int, dt: float, look: bool = True) -> None:
+    """Apply movement + mouse look. Space/Shift move vertically and the mouse wheel zooms, free camera only.
+    look=False ignores the mouse (it is turning something you hold)."""
     step = PLAYER_SPEED * dt    # distance moved this frame
     forward, sideway = move_axes()
-    if camera_mode == pr.CameraMode.CAMERA_FIRST_PERSON:
-        vertical = 0.0
-    else:
-        vertical = (pr.is_key_down(pr.KeyboardKey.KEY_SPACE) - pr.is_key_down(pr.KeyboardKey.KEY_LEFT_SHIFT)) * step
+    free = camera_mode == pr.CameraMode.CAMERA_FREE
+    K = pr.KeyboardKey
+    vertical = (_any_down(K.KEY_SPACE) - _any_down(K.KEY_LEFT_SHIFT)) * step if free else 0.0
+    # raylib's "zoom" moves the camera along the view direction (towards its target), which in first person would
+    # move the player 2 units per wheel notch, straight through walls
+    zoom = pr.get_mouse_wheel_move() * ZOOM_SPEED if free else 0.0
 
-    mouse = pr.get_mouse_delta()
+    mouse = pr.get_mouse_delta() if look else pr.Vector2(0.0, 0.0)
     pr.update_camera_pro(
         camera,
         (forward * step, sideway * step, vertical),
         (mouse.x * MOUSE_SENSITIVITY, mouse.y * MOUSE_SENSITIVITY, 0.0),
-        pr.get_mouse_wheel_move() * ZOOM_SPEED,
+        zoom,
     )

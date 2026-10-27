@@ -1,6 +1,8 @@
 """Collision: ray casts against a mesh placed in the world."""
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from typing import Callable
 
@@ -23,12 +25,27 @@ def world_bounds(model: pr.Model, pos: pr.Vector3) -> pr.BoundingBox:
     )
 
 
+def load_geometry(path: str | Path) -> pr.Model:
+    """Load an .obj without its materials (no mtllib / usemtl). Collision only needs the triangles, it skips loading
+    textures, and raylib can hang forever on an .mtl with 10+ materials (DEVNOTES, Assets)."""
+    lines = Path(path).read_text().splitlines()
+    kept = [line for line in lines if not line.startswith(("mtllib", "usemtl"))]
+    # raylib only loads models from a file path, so write the stripped copy to a temporary file
+    fd, tmp = tempfile.mkstemp(suffix=".obj")
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(kept))
+    try:
+        return pr.load_model(tmp)
+    finally:
+        os.remove(tmp)
+
+
 class MeshCollider:
     """A collision mesh placed in the world. Needs an open window (load_model needs a GL context)."""
 
     def __init__(self, path: str | Path, pos: pr.Vector3) -> None:
         self.pos: pr.Vector3 = pos
-        self.model: pr.Model = pr.load_model(str(path))
+        self.model: pr.Model = load_geometry(path)
         self.bounds: pr.BoundingBox = world_bounds(self.model, pos)
 
     def unload(self) -> None:

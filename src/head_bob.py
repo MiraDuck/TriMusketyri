@@ -1,4 +1,4 @@
-"""Head bob (from bob_example.c).
+"""Head bob (from raylib's first-person example).
 
 Purely visual: apply() returns a copy of the camera for drawing, so the
 player's real position (and therefore collision / y) is never affected.
@@ -19,22 +19,23 @@ def smooth(rate: float, dt: float) -> float:
 
 class HeadBob:
     def __init__(self) -> None:
-        self.head_timer: float = 0.0
-        self.walk_lerp: float = 0.0
-        self.fov_offset: float = 0.0
-        self.lean_x: float = 0.0
-        self.lean_y: float = 0.0
+        self.head_timer: float = 0.0   # walking phase; sin(head_timer * pi) swings -1..1, one swing per step
+        self.walk_lerp: float = 0.0    # 0 standing .. 1 walking, eased so the bob fades in and out
+        self.fov_offset: float = 0.0   # eases to WALK_FOV_DELTA while walking
+        self.lean_x: float = 0.0       # roll (radians) towards the strafe direction
+        self.lean_y: float = 0.0       # pitch (radians): look slightly down walking forward, up walking back
 
     def update(self, moving: bool, sideway: float, forward: float, dt: float) -> None:
+        # Every value eases towards its goal with x += (goal - x) * smooth(rate, dt); a higher rate is snappier.
         if moving:
-            self.head_timer += dt * 3.0
+            self.head_timer += dt * 3.0   # 3 = steps per second (1.5 sway cycles)
             self.walk_lerp += (1.0 - self.walk_lerp) * smooth(10.0, dt)
             self.fov_offset += (WALK_FOV_DELTA - self.fov_offset) * smooth(5.0, dt)
         else:
             self.walk_lerp += (0.0 - self.walk_lerp) * smooth(10.0, dt)
             self.fov_offset += (0.0 - self.fov_offset) * smooth(5.0, dt)
-        self.lean_x += (sideway * 0.02 - self.lean_x) * smooth(10.0, dt)
-        self.lean_y += (forward * 0.015 - self.lean_y) * smooth(10.0, dt)
+        self.lean_x += (sideway * 0.02 - self.lean_x) * smooth(10.0, dt)    # 0.02 rad max roll
+        self.lean_y += (forward * 0.015 - self.lean_y) * smooth(10.0, dt)   # 0.015 rad max pitch
 
     def apply(self, cam: pr.Camera3D) -> pr.Camera3D:
         """Return a copy of cam with the bob effects applied (y is left untouched)."""
@@ -46,6 +47,7 @@ class HeadBob:
         sway = pr.vector3_scale(right, head_sin * BOB_SIDE * self.walk_lerp)
         pos = pr.vector3_add(cam.position, sway)
 
+        # pitch the view by lean_y, then roll the up vector around the view by the step sway + strafe lean
         look = pr.vector3_rotate_by_axis_angle(fwd, right, -self.lean_y)
         up = pr.vector3_rotate_by_axis_angle(
             pr.Vector3(0, 1, 0), look, head_sin * STEP_ROTATION + self.lean_x)

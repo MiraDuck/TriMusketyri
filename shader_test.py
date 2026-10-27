@@ -217,7 +217,7 @@ outline_thickness = 0.025
 
 LIGHT_HEIGHT = 5.0
 LIGHT_RADIUS = 5.0
-LIGHT_SPEED = 0
+LIGHT_SPEED = 2
 
 
 # =========================================================
