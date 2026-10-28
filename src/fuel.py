@@ -11,7 +11,8 @@
 - `factor` multiplies the engine's power: below FUEL_LOW (30 %) it falls with the fuel, to 0 when empty (the engine
   dies on the way); above FUEL_OVERCLOCK (90 %) it rises to FUEL_OVERCLOCK_BOOST at full: the engine OVERCLOCKS,
   spinning faster than 100 % (digs faster, burns faster) and heating the drill (`heat`, added to the cooling's drift).
-- Click the stockpile (CoalPile) with empty hands: you carry one piece (drawn in your hand). Click the furnace hatch
+- Click the stockpile (CoalPile) with empty hands: you carry one piece (drawn in your hand); click it again while
+  you carry one to put it back. Click the furnace hatch
   (Hatch): it swings open / shut; click it while it is open and you carry coal: the coal goes in.
 - The fuel bar on the console (Fuel_Level, a sliding dial: its marker is modelled at the top and slides down) shows
   the level: full at the top, empty at the bottom.
@@ -112,10 +113,10 @@ class Fuel:
         return FUEL_OVERCLOCK_HEAT * self.overclock
 
     def update(self, dt: float, camera: pr.Camera3D, speed: float, depth: float) -> None:
-        if self.pile.clicked and not self.carrying:
-            self.carrying = True
+        if self.pile.clicked:   # take a piece, or put the one you carry back
+            self.carrying = not self.carrying
             self.audio.play_sound_at(self.take_sound, self.pile.center, camera, SFX_NEAR, SFX_FAR)
-            print("FUEL: took a piece of coal")
+            print(f"FUEL: {'took a piece of coal' if self.carrying else 'put the coal back'}")
         if self.hatch.clicked:
             if self.carrying and self.hatch.open:
                 self.carrying = False

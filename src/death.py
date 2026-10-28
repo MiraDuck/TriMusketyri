@@ -2,8 +2,8 @@
 explodes) or you passed out (life support). The death screen shows the run's report; type your name and save it.
 
     death = Death(audio, "engine-faliure-explosion")   # a loaded sound, for the explosion
-    death.start(cause, depth, time, explode=True)   # what failed, how deep you got, how long you survived
-                                                    # (does nothing if already started)
+    death.start(cause, depth, time, explode=True)   # what failed and the last reported depth (None: no report
+                                                    # sent), how long you survived (does nothing if started)
     death.update(dt)               # every frame
     view = death.shake(view)       # the drill shakes harder and harder until it blows
     death.draw()                   # every frame after the HUD: the fade / flash, then the death screen
@@ -14,8 +14,8 @@ Explosion (seconds from start): the failure sound rumbles and the view shakes mo
 move, in the dark); at DEATH_EXPLOSION_AT (where the bang is in the sound) every looping sound and the music stop,
 the screen flashes DEATH_FLASH_COLOR and fades to black.
 Passing out: the screen fades to black over PASS_OUT_FADE (the eyes closing, more to come), then the sounds stop.
-Then the same death screen: DEATH_TITLE and the run's report (records.py: name, time survived, depth, what failed)
-fade in DEATH_TEXT_AT later. The name starts as the last saved run's; type to change it (Backspace deletes). From
+Then the same death screen: DEATH_TITLE and the run's report (records.py: name, time survived, the last reported
+depth, the expected cause; both unknown without a report) fade in DEATH_TEXT_AT later. The name starts as the last saved run's; type to change it (Backspace deletes). From
 DEATH_CONTINUE_AT, Enter saves the run (records.save_run) and Esc leaves without saving.
 """
 from __future__ import annotations
@@ -27,7 +27,8 @@ import pyray as pr
 from . import ui
 from .audio import Audio
 from .config import (
-    DEATH_CONTINUE_AT, DEATH_EXPLOSION_AT, DEATH_FLASH_COLOR, DEATH_FLASH_TIME, DEATH_NAME_LENGTH, DEATH_SHAKE,
+    DEATH_CONTINUE_AT, DEATH_EXPLOSION_AT, DEATH_FLASH_COLOR, DEATH_FLASH_TIME, DEATH_NAME_LENGTH, DEATH_NO_REPORT,
+    DEATH_SHAKE,
     DEATH_TEXT_AT, DEATH_TITLE, DEATH_UNNAMED, PASS_OUT_FADE, SCREEN_H,
 )
 from .records import Run, draw_record, last_name, save_run
@@ -44,14 +45,14 @@ class Death:
         self.finished: bool = False
         self.saved: bool = False
 
-    def start(self, cause: str, depth: float, time: float, explode: bool = False) -> None:
+    def start(self, cause: str | None, depth: float | None, time: float, explode: bool = False) -> None:
         if self.active:
             return
         self.active, self.explode = True, explode
         self.run = Run(last_name(), time, depth, cause, Run.now())
         if explode:
             self.audio.play_sound(self.sound)
-        print(f"DEATH: {ui.plain(cause)} ({depth:.0f} m, {time:.0f} s)")
+        print(f"DEATH: {ui.plain(self.run.cause_text)} ({ui.plain(self.run.depth_text)}, {time:.0f} s)")
 
     @property
     def _cover_at(self) -> float:
@@ -122,6 +123,8 @@ class Death:
         if text > 0:
             ui.draw_centered(DEATH_TITLE, w / 2, (SCREEN_H / 2 - 250) * s, 60 * s, pr.fade(pr.RED, text))
             draw_record(self.run, w / 2, (SCREEN_H / 2 - 160) * s, s, text, caret=not self.finished)
+        if text > 0 and self.run.depth is None:
+            ui.draw_centered(DEATH_NO_REPORT, w / 2, (SCREEN_H / 2 + 145) * s, 22 * s, pr.fade(pr.RED, text))
         if t >= DEATH_CONTINUE_AT:
             ui.draw_centered("Napište své jméno.   Enter: uložit záznam   Esc: neukládat", w / 2,
-                             (SCREEN_H / 2 + 160) * s, 20 * s, pr.GRAY)
+                             (SCREEN_H / 2 + 185) * s, 20 * s, pr.GRAY)

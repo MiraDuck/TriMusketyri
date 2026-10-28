@@ -56,6 +56,7 @@ CAMERA_FOVY: float = 60.0
 PLAYER_SPEED: float = 3.6    # units / second
 MOUSE_SENSITIVITY: float = 0.05
 ZOOM_SPEED: float = 2.0      # mouse wheel, free camera only
+DEBUG_MENU: bool = True      # F3 opens the debug menu (its info + the debug keys); False for the finished game
 DEBUG_REACH: float = 20.0    # with hitboxes on (F1), how far away the thing you look at gets its details shown
 
 # ---------------- Drill ----------------
@@ -257,9 +258,9 @@ BREATH_VOLUME: tuple[float, float] = (4.0, 12.0)   # when it starts, at full str
                                                     # loudest is ~5 % of full scale, so > 1 amplifies it)
 
 # ---------------- Computer (src/computer.py) ----------------
-# The rest room's computer collects the drill's status ("Sbírání dat...", data_1) for COMPUTER_COOLDOWN, then shows
-# "Data připravena" (data_2): pull its lever to send the status (depth, engine, oxygen, temperature) and it starts
-# collecting again.
+# The rest room's computer: during the call at the start its lever skips the call; then it wishes you luck, and
+# from then on it collects the drill's status for COMPUTER_COOLDOWN, then "DATA PŘIPRAVENA": pull its lever to send
+# it (the depth goes in Morse code) and it starts collecting again. Its screen is drawn in code (no pictures).
 COMPUTER_CAR: str = "rest_room"
 COMPUTER_LEVER: str = "Rest_Rooms/Computer_Lever.glb"   # sticks out of a slot on its side
 COMPUTER_LEVER_THROW: float = 60.0     # degrees it swings down (about its bone's X axis), then back
@@ -267,15 +268,23 @@ COMPUTER_LEVER_THROW: float = 60.0     # degrees it swings down (about its bone'
 COMPUTER_SCREEN_CORNERS: tuple[pr.Vector3, ...] = (
     pr.Vector3(-0.144, 1.704, -3.025), pr.Vector3(0.358, 1.704, -3.025),
     pr.Vector3(0.358, 1.357, -3.025), pr.Vector3(-0.144, 1.357, -3.025))
-COMPUTER_SCREENS: tuple[Path, Path] = (MODELS_DIR / "Textures" / "data_1.png",   # collecting
-                                       MODELS_DIR / "Textures" / "data_2.png")   # ready to send
-COMPUTER_SCREEN_WIDTH: int = 1024      # the pictures are 3508 px wide: scaled down when loaded
+COMPUTER_SCREEN_SIZE: tuple[int, int] = (720, 500)   # its render texture, pixels (the screen's proportions)
+COMPUTER_LUCK: str = "HODNĚ ŠTĚSTÍ!"   # shown and beeped (in Morse, without the accents) once the call is over
+COMPUTER_LUCK_TIME: float = 3.0        # seconds it shows it before it starts collecting
+COMPUTER_REPORT_TIME: float = 6.0      # seconds it shows what it sent, after you pull the lever
 COMPUTER_COOLDOWN: float = 60.0        # seconds it collects before the data is ready again
 # When it sends, it beeps the depth in Morse code: a sine tone made in code (computer.morse_wave), not a recording
 COMPUTER_MORSE_TONE: float = 700.0     # Hz
 COMPUTER_MORSE_UNIT: float = 0.07      # seconds per dot (a dash is 3); ~17 words per minute
 COMPUTER_MORSE_VOLUME: float = 0.5     # of full scale
 COMPUTER_MORSE_RATE: int = 44100       # samples / s
+
+# ---------------- The call at the start (src/call.py) ----------------
+# A phone call plays when a game starts, heard everywhere (not from a place). Nothing happens in the drill until it
+# is over: no digging, no faults, no burst pipes, no fuel burnt, oxygen and temperature hold, the time survived
+# doesn't run. Pull the computer's lever to skip it.
+INTRO_CALL: Path = ROOT / "voices" / "PhoneGuyBeginingUPGRADE.wav"   # 2:24
+INTRO_CALL_VOLUME: float = 0.45   # of the SFX volume (the recording is loud: this is a bit above the ambience)
 
 # ---------------- Alarm (src/alarm.py) ----------------
 # While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
@@ -297,7 +306,7 @@ DEATH_TEXT_AT: float = 2.0          # seconds after the bang the run's report fa
 DEATH_CONTINUE_AT: float = 4.0      # seconds after the bang Enter saves it / Esc skips it, back to the menu
 PASS_OUT_FADE: float = 3.0          # passing out: seconds the screen takes to go black (no explosion)
 DEATH_TITLE: str = "MISSION FAILED"
-# What failed: the run's report (records.py) and the statistics show it.
+# What failed: the run's report (records.py) and the statistics show it as the expected cause, if a report was sent.
 DEATH_TEXT_ENGINE: str = "Výbuch motoru"
 DEATH_TEXT_FUEL: str = "Došlo palivo"
 DEATH_TEXT_OXYGEN_LOW: str = "Nedostatek kyslíku"
@@ -306,6 +315,7 @@ DEATH_TEXT_HOT: str = "Přehřátí"
 DEATH_TEXT_COLD: str = "Podchlazení"
 DEATH_NAME_LENGTH: int = 20         # letters you can type for the report's name
 DEATH_UNNAMED: str = "Neznámý"      # saved with no name typed
+DEATH_NO_REPORT: str = "Žádné hlášení nebylo odesláno: povrch neví, kde jste skončili."   # under the card
 
 # ---------------- Records, statistics (src/records.py, src/stats.py) ----------------
 RUNS_FILE: Path = ROOT / "runs.json"   # every saved run's report (not in git)

@@ -2,9 +2,10 @@
 
     StatsScreen().run(audio, menu.draw_background)   # until Zpět / Esc (True) or the window closes (False)
 
-The list (newest first) shows each run's name, depth, time survived, what failed and when, with a summary on top
-(how many runs, the deepest, the longest). The mouse wheel scrolls it; click a run to see its report (the same card
-as on the death screen), Zpět or Esc goes back.
+The list (newest first) shows each run's name, last reported depth, time survived, expected cause and when, with a
+summary on top (how many runs, the deepest reported, the longest). The mouse wheel scrolls it; click a run to see
+its report (the same card as on the death screen): Zpět or Esc goes back, Smazat záznam deletes it (after
+"Opravdu smazat?").
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import pyray as pr
 from . import ui
 from .audio import Audio
 from .config import SCREEN_GREEN, SCREEN_H
-from .records import Run, draw_record, format_time, load_runs
+from .records import Run, delete_run, draw_record, format_time, load_runs
 
 # In SCREEN_H-high pixels, scaled to the window
 PANEL_W: float = 1200
@@ -23,10 +24,10 @@ PANEL_H: float = 760
 ROW_H: float = 40
 LIST_TOP: float = 190     # from the panel's top: the first row
 LIST_ROWS: int = 12       # rows shown at once
-TEXT: float = 24
+TEXT: float = 22
 # column: (header, x from the panel's left)
-COLUMNS: tuple[tuple[str, float], ...] = (("Jméno", 40), ("Hloubka", 340), ("Přežitý čas", 480),
-                                          ("Příčina", 680), ("Datum", 950))
+COLUMNS: tuple[tuple[str, float], ...] = (("Jméno", 40), ("Poslední hloubka", 290), ("Přežitý čas", 525),
+                                          ("Předpokládaná příčina", 692), ("Datum", 980))
 
 
 class StatsScreen:
@@ -34,6 +35,7 @@ class StatsScreen:
         self.runs: list[Run] = load_runs()[::-1]   # newest first
         self.scroll: int = 0                        # the first row shown
         self.open: Run | None = None                # the run whose report is shown
+        self.confirm: bool = False                  # asking whether to delete it
 
     def run(self, audio: Audio, background: Callable[[], None]) -> bool:
         """Show it until Zpět / Esc (True) or the window closes (False). `background` draws the menu behind it."""
@@ -55,9 +57,22 @@ class StatsScreen:
         if self.open is not None:   # one run's report
             pr.draw_rectangle(0, 0, w, h, pr.fade(pr.BLACK, 0.6))
             draw_record(self.open, w / 2, h / 2 - 190 * s, s)
-            back = pr.Rectangle(w / 2 - 120 * s, h / 2 + 140 * s, 240 * s, 56 * s)
-            if ui.button(back, "Zpět", 28 * s) or esc:
-                self.open = None
+            left = pr.Rectangle(w / 2 - 270 * s, h / 2 + 150 * s, 250 * s, 56 * s)
+            right = pr.Rectangle(w / 2 + 20 * s, h / 2 + 150 * s, 250 * s, 56 * s)
+            if self.confirm:
+                ui.draw_centered("Opravdu smazat tento záznam?", w / 2, h / 2 + 110 * s, 26 * s, pr.RED)
+                if ui.button(left, "Smazat", 28 * s):
+                    delete_run(self.open)
+                    self.runs.remove(self.open)
+                    self.scroll = max(min(self.scroll, len(self.runs) - LIST_ROWS), 0)
+                    self.open, self.confirm = None, False
+                elif ui.button(right, "Zpět", 28 * s) or esc:
+                    self.confirm = False
+            else:
+                if ui.button(left, "Smazat záznam", 28 * s):
+                    self.confirm = True
+                elif ui.button(right, "Zpět", 28 * s) or esc:
+                    self.open = None
             return False
 
         left, top = (w - PANEL_W * s) / 2, (h - PANEL_H * s) / 2
@@ -76,7 +91,7 @@ class StatsScreen:
                 pr.draw_rectangle_rec(row, pr.fade(ui.GREEN, 0.25))
                 if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT):
                     self.open = run
-            values = (run.name, f"{run.depth:.0f} m", format_time(run.time), run.cause, run.date)
+            values = (run.name, run.depth_text, format_time(run.time), run.cause_text, run.date)
             for (_, x), value in zip(COLUMNS, values):
                 ui.draw_text(value, left + x * s, row.y + (ROW_H - TEXT) / 2 * s, TEXT * s, pr.RAYWHITE)
         if not self.runs:
@@ -92,7 +107,9 @@ class StatsScreen:
     def _summary(self) -> str:
         if not self.runs:
             return "Počet misí: 0"
-        deepest = max(self.runs, key=lambda r: r.depth)
+        reported = [r for r in self.runs if r.depth is not None]
+        deepest = max(reported, key=lambda r: r.depth) if reported else None
         longest = max(self.runs, key=lambda r: r.time)
-        return (f"Počet misí: {len(self.runs)}     Nejhlouběji: {deepest.depth:.0f} m ({deepest.name})     "
+        deep = f"{deepest.depth_text} ({deepest.name})" if deepest else "-"
+        return (f"Počet misí: {len(self.runs)}     Nejhlouběji: {deep}     "
                 f"Nejdéle: {format_time(longest.time)} ({longest.name})")

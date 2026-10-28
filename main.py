@@ -9,8 +9,9 @@ import pyray as pr
 from src import config
 from src.alarm import Alarm
 from src.audio import Audio
+from src.call import Call
 from src.controls import handle_hotkeys, handle_interaction, move_axes, move_camera
-from src.computer import Computer
+from src.computer import Computer, Status
 from src.death import Death
 from src.debug import DebugOptions, looked_at
 from src.dial import Dial
@@ -183,12 +184,18 @@ def play(audio: Audio) -> bool:
     alarm = Alarm(lamps, audio, alarm_sound)
     death = Death(audio, death_sound)
     screens = Screens(car_pos["control_room"])
-    computer = Computer(switches["computer_lever"], car_pos[config.COMPUTER_CAR], audio)
+    call = Call(audio, audio.load_sound(config.INTRO_CALL))   # the phone call: the drill waits until it's over
+    computer = Computer(switches["computer_lever"], car_pos[config.COMPUTER_CAR], audio, call)
 
-    def status() -> str:
-        """What the computer sends: the drill's state."""
-        return (f"depth {engine.depth:.0f} m, engine {engine.speed:.0%} ({engine.state.value}), "
-                f"fuel {fuel.level:.0%}, oxygen {life.oxygen.level:.0%}, temperature {life.cooling.level:.0%}")
+    def die(cause: str, explode: bool = False) -> None:
+        """Mission failed: the record only knows what the computer sent (no report: no depth, no cause)."""
+        reported = computer.sent > 0
+        death.start(cause if reported else None, computer.last_depth, survived, explode)
+
+    def status() -> Status:
+        """What the computer shows and sends: the drill's readings."""
+        return Status(engine.depth, engine.speed, engine.state.value, fuel.level, life.oxygen.level,
+                      life.cooling.level)
 
     pr.rl_set_line_width(2)
 
@@ -215,40 +222,44 @@ def play(audio: Audio) -> bool:
         if pr.is_key_pressed(pr.KeyboardKey.KEY_ESCAPE) and not death.active:
             paused = not paused
             pr.enable_cursor() if paused else pr.disable_cursor()
+            call.pause() if paused else call.resume()
 
         if not paused:
-            survived += dt if not death.active else 0.0
+            # during the call at the start nothing happens in the drill: its time stands still (`world`)
+            call.update(dt)
+            world = 0.0 if call.active else dt
+            survived += world if not death.active else 0.0
             # ---- input ----
             camera_mode = handle_hotkeys(camera, camera_mode, debug)
             held = handle_interaction(camera, interactables, held)
             move_camera(camera, camera_mode, dt, look=held is None)
 
             # ---- world ----
-            faults.update(dt)   # breakers flip, valves drift
-            if pr.is_key_pressed(pr.KeyboardKey.KEY_F3):   # debug: break something now
+            if not call.active:
+                faults.update(dt)   # breakers flip, valves drift
+            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F5):   # debug: break something now
                 faults.cause_fault()
-            if pr.is_key_pressed(pr.KeyboardKey.KEY_F4):   # debug: burst a pipe now
+            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F4):   # debug: burst a pipe now
                 whole = [pipe for pipe in pipe_parts if not pipe.burst]
                 if whole:
                     pipes.burst(random.choice(whole))
             for thing in [*interactables, *dials]:
                 thing.update(dt)
-            fuel.update(dt, camera, engine.speed, engine.depth)   # take coal, the hatch, feed it; the engine burns it
-            engine.update(dt, fuel.factor)   # after its valve, lever and fuel, before the spinner turns it
+            fuel.update(world, camera, engine.speed, engine.depth)   # take coal, the hatch, feed it; the engine burns it
+            engine.update(world, fuel.factor)   # after its valve, lever and fuel, before the spinner turns it
             # oxygen + cooling, after their valves (overclocking heats the drill); they set their dials for next frame
-            life.update(dt, engine.depth, fuel.heat)
+            life.update(world, engine.depth, fuel.heat)
             if life.cause:   # passed out
-                death.start(life.cause, engine.depth, survived)
-            pipes.update(dt, camera, pr.is_key_down(pr.KeyboardKey.KEY_E))   # bursts (by pressure), hold E to fix
-            computer.update(dt, camera, status, engine.depth)   # collects, then its lever sends the status
+                die(life.cause)
+            pipes.update(world, camera, pr.is_key_down(pr.KeyboardKey.KEY_E))   # bursts (by pressure), hold E to fix
+            computer.update(dt, camera, status())   # skips the call, collects, then its lever sends the status
             for spinner in spinners:
                 spinner.update(dt)
             for breaker, lamp in breaker_lamps:   # up = on; it switches as the handle passes halfway
                 lamp.light.on = not breaker.thrown
             if engine.dead:   # stopped for good: every light goes out (the breakers can't help) and the drill blows
                 out_of_fuel = fuel.level < config.FUEL_LOW
-                death.start(config.DEATH_TEXT_FUEL if out_of_fuel else config.DEATH_TEXT_ENGINE, engine.depth, survived,
-                            explode=True)
+                die(config.DEATH_TEXT_FUEL if out_of_fuel else config.DEATH_TEXT_ENGINE, explode=True)
                 for light in lighting.lights:
                     light.on = False
             alarm.active = engine.failing   # red flashing lamps + beeps until the motor runs again (none once dark)
@@ -314,6 +325,7 @@ def play(audio: Audio) -> bool:
         if choice == "resume":
             paused = False
             pr.disable_cursor()
+            call.resume()
 
     for entity in [*entities, coal]:
         entity.unload()

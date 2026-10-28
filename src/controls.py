@@ -5,7 +5,7 @@ from typing import Iterable
 
 import pyray as pr
 
-from .config import MOUSE_SENSITIVITY, PLAYER_SPEED, ZOOM_SPEED
+from .config import DEBUG_MENU, MOUSE_SENSITIVITY, PLAYER_SPEED, ZOOM_SPEED
 from .debug import DebugOptions
 from .interactable import Interactable
 
@@ -30,7 +30,19 @@ def move_axes() -> tuple[int, int]:
 
 
 def handle_hotkeys(camera: pr.Camera3D, camera_mode: int, debug: DebugOptions) -> int:
-    """Mode keys, debug toggles, fullscreen. Returns camera_mode; `debug` is changed in place."""
+    """F3 debug menu, and while it is open the mode keys and debug toggles; fullscreen. Returns camera_mode;
+    `debug` is changed in place. Closing the menu turns the debug views off and goes back to first person."""
+    if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
+        pr.toggle_fullscreen()
+    if DEBUG_MENU and pr.is_key_pressed(pr.KeyboardKey.KEY_F3):
+        if debug.menu:
+            debug.close()
+            camera_mode = pr.CameraMode.CAMERA_FIRST_PERSON
+            camera.up = UP_VECTOR
+        else:
+            debug.menu = True
+    if not debug.menu:
+        return camera_mode
     for key, mode in MODE_KEYS.items():
         if pr.is_key_pressed(key):
             camera_mode = mode
@@ -45,8 +57,6 @@ def handle_hotkeys(camera: pr.Camera3D, camera_mode: int, debug: DebugOptions) -
         debug.unlit = not debug.unlit
     if pr.is_key_pressed(pr.KeyboardKey.KEY_V):
         debug.no_vignette = not debug.no_vignette
-    if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
-        pr.toggle_fullscreen()
     return camera_mode
 
 
