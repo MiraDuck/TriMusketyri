@@ -2,14 +2,14 @@
 LIFE_SAFE for too long and you pass out (Death).
 
     life = LifeSupport(oxygen, cooling)    # two Regulators, see main.py
-    life.update(dt, depth)                 # every frame, after the valves (the deeper, the hotter)
+    life.update(dt, depth, engine_heat)    # every frame, after the valves (the deeper, the hotter)
     life.cause                             # None, or the death text once you passed out
     life.strain                            # 0..1: how close to passing out (for the eyes-closing effect, later)
 
 Each system is a Regulator with a red valve (PRESSURE: how hard it pushes, 0..1 = closed..open) and a blue valve
 (the IDEAL LEVEL it pushes towards). Every second the level moves `coupling * pressure * (ideal - level)` towards
 the ideal, plus its drift: the oxygen falls as you breathe it (OXYGEN_USE), the temperature rises as the drill heats
-up (HEAT + HEAT_PER_METRE * depth, at most HEAT_MAX; the engine will add to it later). So the level settles where
+up (HEAT + HEAT_PER_METRE * depth, at most HEAT_MAX, plus the engine's heat while it is overclocked: fuel.py). So the level settles where
 the push and the drift balance: `ideal - drift / (coupling * pressure)` away from the ideal; too little pressure and
 it can't keep up, and the deeper you go, the more pressure (or the colder the ideal) the cooling needs, up to
 HEAT_MAX (1800 m), which full cooling can always hold. The cooling is coupled 3x as
@@ -97,9 +97,10 @@ class LifeSupport:
         go on forever."""
         return min(HEAT + HEAT_PER_METRE * depth, HEAT_MAX)
 
-    def update(self, dt: float, depth: float) -> None:
+    def update(self, dt: float, depth: float, engine_heat: float = 0.0) -> None:
+        """`engine_heat`: extra temperature / s from the engine (overclocked), on top of the HEAT_MAX cap."""
         self.oxygen.update(dt, -OXYGEN_USE)
-        self.cooling.update(dt, self.heat(depth))
+        self.cooling.update(dt, self.heat(depth) + engine_heat)
 
     @property
     def strain(self) -> float:
