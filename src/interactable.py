@@ -2,6 +2,7 @@
 
     lever = Lever("lever", config.LEVER_MODEL, config.LEVER_POS)
     lever.interact()    # flips it and prints the new state
+    button = Button("power_button", "Models/Control_Rooms/Power_Lever.glb", car.pos, throw=-90)
 
 Subclasses override `interact()` (what a click does) and `update(dt)` (animation).
 Grabbable ones (valve) instead get `grab(camera)` on click, `drag(mouse_delta)` every frame while the
@@ -39,6 +40,7 @@ class Lever(Interactable):
 
     A rigged one (.glb) swings `throw` degrees about its bone's Y axis when pulled down (negative = the other way),
     taking LEVER_FLIP_TIME; `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
+    `flipped` is True for the one frame (after update) in which `down` changed, by a click or by a fault.
     """
 
     def __init__(self, *args, throw: float = 0.0, **kwargs) -> None:
@@ -46,6 +48,8 @@ class Lever(Interactable):
         self.down: bool = False
         self.throw: float = throw
         self.angle: float = 0.0
+        self.flipped: bool = False
+        self._was_down: bool = False
         self.pivot, self.axis = bone_pivot_axis(self.model) if throw else (None, None)
 
     @property
@@ -60,6 +64,12 @@ class Lever(Interactable):
         print(f"{self.name}: {'down' if self.down else 'up'}")
 
     def update(self, dt: float) -> None:
+        self.flipped = self.down != self._was_down
+        self._was_down = self.down
+        self._swing(dt)
+
+    def _swing(self, dt: float) -> None:
+        """Move the handle towards `down` / up."""
         if self.pivot is None:
             return
         target = self.throw if self.down else 0.0
@@ -72,11 +82,28 @@ class Lever(Interactable):
         return super().debug_lines() + [f"down: {self.down}{moving}"]
 
 
+class Button(Lever):
+    """A press button: a click plays its swing (`throw` degrees about its bone, like a lever) there and back again,
+    and `flipped` is True for the one frame (after update) the press starts in. `down` is True on the way there."""
+
+    def interact(self) -> None:
+        self.down = True
+        print(f"{self.name}: pressed")
+
+    def update(self, dt: float) -> None:
+        self.flipped = self.down and not self._was_down
+        self._was_down = self.down
+        self._swing(dt)
+        if self.down and self.angle == self.throw:   # all the way over: come back
+            self.down = False
+
+
 class Valve(Interactable):
     """A wheel you grab and turn by moving the mouse left / right, like pulling the top of its rim.
     Right turns it clockwise as you see it (closes), left counter-clockwise (opens).
 
-    `angle` (degrees, 0 = closed, no upper limit) is kept between grabs.
+    `angle` (degrees, 0 = closed, up to `max_angle`; None = no upper limit) is kept between grabs.
+    `turning` is True while it moved this frame (by hand or by `spin`).
     `spin` (degrees / s) turns it on its own for emergencies: positive opens, negative closes (and stops at 0),
     0 stops it. It keeps going while held, so the player has to fight it.
 
@@ -92,7 +119,10 @@ class Valve(Interactable):
     def __init__(self, *args, axis: pr.Vector3 = pr.Vector3(0.0, 0.0, 1.0), **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.angle: float = 0.0
+        self.max_angle: float | None = None
         self.spin: float = 0.0
+        self.turning: bool = False
+        self._last_angle: float = 0.0
         if self.model.skeleton.boneCount:
             self.pivot, self.axis = bone_pivot_axis(self.model)
         else:
@@ -107,6 +137,12 @@ class Valve(Interactable):
 
     def turn(self, degrees: float) -> None:
         self.angle = max(self.angle + degrees, 0.0)
+        if self.max_angle is not None:
+            self.angle = min(self.angle, self.max_angle)
+
+    def set_angle(self, degrees: float) -> None:
+        """Put it at `degrees` straight away (a start setting): not a turn, so `turning` stays False."""
+        self.angle = self._last_angle = degrees
 
     def grab(self, camera: pr.Camera3D) -> None:
         forward = pr.vector3_subtract(camera.target, camera.position)
@@ -126,4 +162,6 @@ class Valve(Interactable):
     def update(self, dt: float) -> None:
         if self.spin:
             self.turn(self.spin * dt)
+        self.turning = self.angle != self._last_angle
+        self._last_angle = self.angle
         self.set_transform(rotation_about(self.pivot, self.axis, self.angle))

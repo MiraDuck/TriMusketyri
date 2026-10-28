@@ -11,15 +11,16 @@ Only models passed to `add()` are lit; everything else draws with raylib's defau
 `set_enabled(False)` puts the default shaders back.
 
 Each light only lights its `zone` (a z range: its car), since there are no shadows to stop it at the walls.
-A lamp's light also has `fill`: it lifts its whole car from LIGHT_DARK to LIGHT_AMBIENT while it is on.
+A lamp's light also has `fill`: it lifts its whole car from LIGHT_DARK to LIGHT_AMBIENT while it is on (tinted by
+`fill_color`, white normally). `lamp.set_alarm(True)` makes a lamp flash red and its car with it.
 """
 from __future__ import annotations
 
 import pyray as pr
 
 from .config import (
-    LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE, LIGHT_AMBIENT, LIGHT_BANDS, LIGHT_DARK,
-    SHADERS_DIR,
+    ALARM_BLINK, ALARM_COLOR, ALARM_FILL_COLOR, LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE,
+    LIGHT_AMBIENT, LIGHT_BANDS, LIGHT_DARK, SHADERS_DIR,
 )
 from .entity import Entity
 
@@ -32,7 +33,7 @@ EVERYWHERE: tuple[float, float] = (-1e9, 1e9)
 
 class Light:
     """A point light. `blink` = blinks per second (0 = steady). Switch it with `on`.
-    It only lights `zone` (z from .. to, its car), and adds `fill` to all of it while on (lamps)."""
+    It only lights `zone` (z from .. to, its car), and adds `fill` (times `fill_color`) to all of it while on."""
 
     def __init__(
         self,
@@ -54,6 +55,7 @@ class Light:
         self.blink: float = blink
         self.zone: tuple[float, float] = zone
         self.fill: float = fill
+        self.fill_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
         self.on: bool = True
 
     def strength(self, time: float) -> float:
@@ -67,7 +69,9 @@ class Lamp(Entity):
     """A ceiling lamp: the lamp model hanging from `pos` with its Light inside the shade (`.light`).
     Don't add the lamp model to Lighting: it is the light source, so it is drawn unlit, full bright while its light
     shines and dark while it is off (switched off, or the dark half of a blink). Not solid.
-    `zone` is its car's z range: the light fills it (LIGHT_AMBIENT) and doesn't reach past it."""
+    `zone` is its car's z range: the light fills it (LIGHT_AMBIENT) and doesn't reach past it.
+    `set_alarm(True)`: the light flashes red (ALARM_COLOR, ALARM_BLINK times / s) and tints its car red, while it is
+    on (a lamp switched off by its breaker stays dark); `set_alarm(False)` puts its own colour back."""
 
     def __init__(
         self,
@@ -82,16 +86,35 @@ class Lamp(Entity):
         super().__init__(name, LAMP_MODEL, pos)
         self.light: Light = Light(pr.Vector3(pos.x, pos.y - LAMP_LIGHT_DROP, pos.z), color, intensity, range, blink,
                                   zone, fill=LIGHT_AMBIENT - LIGHT_DARK)
+        self.alarm: bool = False
+        self._normal: tuple[tuple[int, int, int, int], float] = (self.light.color, self.light.blink)
+
+    def set_alarm(self, on: bool) -> None:
+        if on == self.alarm:
+            return
+        self.alarm = on
+        light = self.light
+        if on:
+            self._normal = (light.color, light.blink)
+            light.color = (ALARM_COLOR.r, ALARM_COLOR.g, ALARM_COLOR.b, ALARM_COLOR.a)
+            light.blink = ALARM_BLINK
+            light.fill_color = ALARM_FILL_COLOR
+        else:
+            light.color, light.blink = self._normal
+            light.fill_color = (1.0, 1.0, 1.0)
 
     def update(self, time: float) -> None:
-        self.tint = LAMP_ON_TINT if self.light.strength(time) > 0 else LAMP_OFF_TINT
+        if self.light.strength(time) <= 0:
+            self.tint = LAMP_OFF_TINT
+        else:   # glows in its light's colour while in an alarm
+            self.tint = pr.Color(*self.light.color) if self.alarm else LAMP_ON_TINT
 
     def debug_lines(self) -> list[str]:
         light = self.light
         return super().debug_lines() + [
             f"light: {'on' if light.on else 'off'}, colour {light.color}, intensity {light.intensity:g}, "
             f"range {light.range:g}, blink {light.blink:g}/s",
-            f"lights z {light.zone[0]:g} .. {light.zone[1]:g}, fill {light.fill:g}",
+            f"lights z {light.zone[0]:g} .. {light.zone[1]:g}, fill {light.fill:g}" + (", ALARM" if self.alarm else ""),
         ]
 
 
@@ -149,7 +172,7 @@ class Lighting:
             colors += [c * strength / 255.0 for c in light.color[:3]]
             ranges.append(light.range)
             zones += list(light.zone)
-            fills.append(light.fill if strength > 0 else 0.0)
+            fills += [c * light.fill if strength > 0 else 0.0 for c in light.fill_color]
         n = len(self.lights)
         vec3 = pr.ShaderUniformDataType.SHADER_UNIFORM_VEC3
         pr.set_shader_value(self.shader, self._loc["lightCount"], pr.ffi.new("int *", n),
@@ -161,7 +184,7 @@ class Lighting:
             pr.set_shader_value_v(self.shader, self._loc["lightRange"], pr.ffi.new("float[]", ranges), floats, n)
             pr.set_shader_value_v(self.shader, self._loc["lightZone"], pr.ffi.new("float[]", zones),
                                   pr.ShaderUniformDataType.SHADER_UNIFORM_VEC2, n)
-            pr.set_shader_value_v(self.shader, self._loc["lightFill"], pr.ffi.new("float[]", fills), floats, n)
+            pr.set_shader_value_v(self.shader, self._loc["lightFill"], pr.ffi.new("float[]", fills), vec3, n)
 
     def unload(self) -> None:
         """Safe before or after the models are unloaded (raylib's unload_model leaves material shaders alone)."""

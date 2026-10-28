@@ -5,6 +5,7 @@
     audio.load_sound("walk.wav")         # file in SFX/, referred to as "walk"
     audio.play_sound("walk")
     audio.add_source("engine.wav", pr.Vector3(0, 3, 8), near=6, far=14)   # loops at that spot
+    audio.play_sound_at("valve-turn", pos, camera)   # a loaded sound, from a spot in the world
     ...
     audio.update(camera)                 # every frame - feeds the streams, places the sources around the camera
     audio.unload()                       # before close_window
@@ -39,6 +40,22 @@ def _smoothstep(edge0: float, edge1: float, x: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
+def _gain(pos: pr.Vector3, listener: pr.Vector3, near: float, far: float, floor: float = 0.0) -> float:
+    """floor..1 from the distance alone: 1 within `near`, fading smoothly to `floor` at `far`."""
+    fade = 1.0 - _smoothstep(near, far, pr.vector3_distance(listener, pos))
+    return floor + (1.0 - floor) * fade
+
+
+def _pan(pos: pr.Vector3, camera: pr.Camera3D) -> float:
+    """-SOURCE_PAN (left) .. SOURCE_PAN (right): how much `pos` is to the right of the view, i.e. dot(direction to
+    the sound, camera right), flattened to the horizontal plane so looking up or down doesn't swap the ears."""
+    forward = pr.vector3_subtract(camera.target, camera.position)
+    right = pr.vector3_normalize(pr.Vector3(-forward.z, 0.0, forward.x))
+    to = pr.Vector3(pos.x - camera.position.x, 0.0, pos.z - camera.position.z)
+    flat = math.hypot(to.x, to.z)
+    return SOURCE_PAN * (pr.vector3_dot_product(right, to) / flat if flat > 0.01 else 0.0)
+
+
 class SoundSource:
     """A looping sound at a point in the world (streamed, so long files are fine).
 
@@ -46,6 +63,7 @@ class SoundSource:
     silent) at `far` and staying there however far away you are; panned left / right by where it is relative to the
     listener's view. Walls don't block it, so pick `far` to be silent by where it should no longer be heard (e.g. a
     little into the next car), or give it a floor to be heard everywhere (the drill engine).
+    `volume` and `pitch` (1 = as recorded, lower = slower and deeper) can be changed while it plays (the motor).
     """
 
     def __init__(self, path: Path, pos: pr.Vector3, volume: float, near: float, far: float,
@@ -55,6 +73,7 @@ class SoundSource:
         self.near: float = near
         self.far: float = far
         self.floor: float = floor
+        self.pitch: float = 1.0
         self.music: pr.Music = pr.load_music_stream(str(path))
         self.music.looping = True
         pr.set_music_volume(self.music, 0.0)   # silent until the first update() places it
@@ -62,19 +81,12 @@ class SoundSource:
 
     def gain(self, listener: pr.Vector3) -> float:
         """floor..1 from the distance alone."""
-        fade = 1.0 - _smoothstep(self.near, self.far, pr.vector3_distance(listener, self.pos))
-        return self.floor + (1.0 - self.floor) * fade
+        return _gain(self.pos, listener, self.near, self.far, self.floor)
 
     def update(self, camera: pr.Camera3D, master: float) -> None:
         pr.set_music_volume(self.music, master * self.volume * self.gain(camera.position))
-        # pan = how much the sound is to the right of the view: dot(direction to the sound, camera right),
-        # flattened to the horizontal plane so looking up or down doesn't swap the ears
-        forward = pr.vector3_subtract(camera.target, camera.position)
-        right = pr.vector3_normalize(pr.Vector3(-forward.z, 0.0, forward.x))
-        to = pr.Vector3(self.pos.x - camera.position.x, 0.0, self.pos.z - camera.position.z)
-        flat = math.hypot(to.x, to.z)
-        side = pr.vector3_dot_product(right, to) / flat if flat > 0.01 else 0.0
-        pr.set_music_pan(self.music, SOURCE_PAN * side)
+        pr.set_music_pan(self.music, _pan(self.pos, camera))
+        pr.set_music_pitch(self.music, self.pitch)
         pr.update_music_stream(self.music)
 
     def unload(self) -> None:
@@ -176,6 +188,15 @@ class Audio:
         pr.set_sound_pitch(sound, pitch)
         pr.set_sound_pan(sound, pan)
         pr.play_sound(sound)
+
+    def play_sound_at(
+        self, name: str, pos: pr.Vector3, listener: pr.Camera3D, near: float = 3.0, far: float = 14.0
+    ) -> None:
+        """Play a loaded sound as if it came from `pos`: full volume within `near` units of the listener, silent
+        from `far`, panned by where it is (it doesn't move with you while it plays; fine for short sounds)."""
+        gain = _gain(pos, listener.position, near, far)
+        if gain > 0.0:
+            self.play_sound(name, self.sfx_volume * gain, pan=_pan(pos, listener))
 
     def stop_sound(self, name: str) -> None:
         pr.stop_sound(self.sounds[name])

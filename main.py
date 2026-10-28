@@ -7,14 +7,16 @@ from pathlib import Path
 import pyray as pr
 
 from src import config
+from src.alarm import Alarm
 from src.audio import Audio
 from src.controls import handle_hotkeys, handle_interaction, move_axes, move_camera
 from src.debug import DebugOptions, looked_at
 from src.dial import Dial
+from src.engine import Engine
 from src.entity import Entity
 from src.faults import FaultDirector
 from src.head_bob import HeadBob
-from src.interactable import Interactable, Lever, Valve
+from src.interactable import Button, Interactable, Lever, Valve
 from src.lighting import Lamp, Light, Lighting
 from src.menu import MainMenu, MenuChoice
 from src.player import Player
@@ -70,6 +72,10 @@ def main() -> None:
         audio.play_music(config.START_MUSIC)
     for filename, pos, volume, near, far, floor in config.SOUND_SOURCES:
         audio.add_source(filename, pos, volume, near, far, floor)
+    switch_sound = audio.load_sound(config.SWITCH_SOUND)
+    switch_sounds = {name: audio.load_sound(f) for name, f in config.SWITCH_SOUNDS.items()}
+    valve_sound = audio.load_sound(config.VALVE_SOUND)
+    alarm_sound = audio.load_sound(config.ALARM_SOUND)
 
     cars = drill_cars()
     # each light only lights its own car (no shadows to stop it at the walls)
@@ -79,11 +85,10 @@ def main() -> None:
     # moving parts are modelled in place in their car, so they go at that car's position; named after the file
     car_pos = {car.name: car.pos for car in cars}
     models = config.MODELS_DIR
-    valve = Valve("valve", config.VALVE_MODEL, config.VALVE_POS)
     interactables: list[Interactable] = [
-        Lever("lever", config.LEVER_MODEL, config.LEVER_POS), valve,
         *[Valve(Path(f).stem.lower(), models / f, car_pos[car]) for car, f in config.VALVES],
         *[Lever(Path(f).stem.lower(), models / f, car_pos[car], throw=throw) for car, f, throw in config.SWITCHES],
+        *[Button(name, models / f, car_pos[car], throw=throw) for car, f, name, throw in config.BUTTONS],
     ]
     dials = [Dial(Path(f).stem.lower(), models / f, car_pos[car], low, high, sweep)
              for car, f, low, high, sweep in config.DIALS]
@@ -99,6 +104,7 @@ def main() -> None:
     colliders = [e.collider for e in entities if e.collider is not None]
     held: Interactable | None = None   # what the player is holding (a valve), None = mouse look is on
     switches = {i.name: i for i in interactables if isinstance(i, Lever)}
+    valves = {i.name: i for i in interactables if isinstance(i, Valve)}
     breaker_lamps = [(switches[breaker], car_lamp[car]) for breaker, car in config.BREAKER_LAMPS.items()]
 
     lighting = Lighting([lamp.light for lamp in lamps] +
@@ -111,7 +117,12 @@ def main() -> None:
     bob = HeadBob()
     debug = DebugOptions()
     faults = FaultDirector([breaker for breaker, _ in breaker_lamps])
-    valve_break_at = config.VALVE_BREAK_TEST_AT
+    engine = Engine(
+        next(s for s in spinners if s.name == config.ENGINE_SPINNER), valves[config.ENGINE_VALVE],
+        switches[config.ENGINE_BUTTON], next((d for d in dials if d.name == config.ENGINE_DIAL), None),
+        audio.sources.get(config.ENGINE_SOUND),
+    )
+    alarm = Alarm(lamps, audio, alarm_sound)
     dial_test_at = 0.0   # TEST (remove): next time the dials get new random values
 
     pr.rl_set_line_width(2)
@@ -126,23 +137,35 @@ def main() -> None:
         move_camera(camera, camera_mode, dt, look=held is None)
 
         # ---- world ----
-        faults.update(dt)   # every 5-15 s something may break (a breaker trips)
+        faults.update(dt)   # every 1-2 min a breaker flips by itself
         if pr.is_key_pressed(pr.KeyboardKey.KEY_F3):   # debug: break something now
             faults.cause_fault()
-        # Emergency example: set VALVE_BREAK_TEST_AT in config and the valve starts turning by itself then.
-        # Real faults will do the same from the fault director: valve.spin = speed (0 = repaired).
-        if valve_break_at is not None and pr.get_time() >= valve_break_at:
-            valve.spin = config.VALVE_BREAK_SPIN   # degrees / s; positive opens, negative closes
-            valve_break_at = None
-        # TEST (remove): every 0.1 s each dial's value goes up or down by up to 3
+        # A valve fault turns a valve by itself (valve.spin = config.VALVE_BREAK_SPIN; 0.0 when repaired).
+        # TEST (remove): every 0.1 s each dial's value goes up or down by up to 3 (not the engine's: it shows the
+        # motor's speed)
         if pr.get_time() >= dial_test_at:
             for d in dials:
-                d.value = min(max(d.value + random.uniform(-3.0, 3.0), d.low), d.high)
+                if d is not engine.dial:
+                    d.value = min(max(d.value + random.uniform(-3.0, 3.0), d.low), d.high)
             dial_test_at = pr.get_time() + 0.1
-        for thing in [*interactables, *dials, *spinners]:
+        for thing in [*interactables, *dials]:
             thing.update(dt)
+        engine.update(dt)   # after its valve and lever, before the spinner turns it
+        for spinner in spinners:
+            spinner.update(dt)
         for breaker, lamp in breaker_lamps:   # up = on; it switches as the handle passes halfway
             lamp.light.on = not breaker.thrown
+        alarm.active = engine.failing   # red flashing lamps + beeps until the motor runs again
+        alarm.update(pr.get_time(), camera)
+
+        # ---- sounds of the parts, from where they are ----
+        for switch in switches.values():
+            if switch.flipped:   # clicked or flipped by a fault
+                audio.play_sound_at(switch_sounds.get(switch.name, switch_sound), switch.center, camera,
+                                    config.SFX_NEAR, config.SFX_FAR)
+        for valve in valves.values():
+            if valve.turning and not audio.is_sound_playing(valve_sound):
+                audio.play_sound_at(valve_sound, valve.center, camera, config.SFX_NEAR, config.SFX_FAR)
 
         # ---- player ----
         if camera_mode == pr.CameraMode.CAMERA_FIRST_PERSON:
@@ -162,7 +185,7 @@ def main() -> None:
         lighting.update(now)
         pr.begin_drawing()
         pr.clear_background(pr.RAYWHITE)
-        inspected = looked_at(camera, entities) if debug.hitboxes else None   # its details go in the HUD
+        inspected = looked_at(camera, entities) if debug.hitboxes else []   # their details go in the HUD
         draw_scene(view_camera, camera, player, entities, lighting.lights, debug, inspected)
         if not debug.no_vignette:
             vignette.draw()   # after the scene, before the HUD so the HUD stays readable

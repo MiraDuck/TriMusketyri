@@ -19,9 +19,19 @@ SFX_VOLUME: float = 1.0
 # `far`. Walls don't block sound, so set `far` to where it should be gone. Cars are 8 long: the control room is
 # z -4..4, the next car z -4..-12, and so on.
 SOUND_SOURCES: list[tuple[str, pr.Vector3, float, float, float, float]] = [
-    # drill engine in front of the control room: loud there, then a steady 30 % through the whole drill
-    ("DrillDoingWhateverDrillsDoButWithTheSoundOfEngine.wav", pr.Vector3(0, 3, 8), 1.0, 6.0, 14.0, 0.2),
+    # drill in front of the control room: loud there, then a steady 10 % through the whole drill
+    ("DrillDoingWhateverDrillsDoButWithTheSoundOfEngine.wav", pr.Vector3(0, 3, 8), 1.0, 6.0, 14.0, 0.1),
+    # the motor, in the engine room (z -36..-28): gone by the middle of the storage room; its volume and pitch
+    # follow how fast it turns (src/engine.py)
+    ("engine.wav", pr.Vector3(-1, 2, -33), 1.0, 3.0, 10.0, 0.0),
 ]
+# Short sounds (files in SFX/) played from where a part is when it moves; heard fully within SFX_NEAR, gone by
+# SFX_FAR (a breaker flipping in the control room is still loud in the next car, nearly gone two cars away).
+SWITCH_SOUND: str = "lever-push-pull.wav"                       # breakers and other switches
+SWITCH_SOUNDS: dict[str, str] = {"power_button": "button-press.wav"}   # switches with their own sound
+VALVE_SOUND: str = "valve-turn.wav"                             # repeats while a valve turns
+SFX_NEAR: float = 3.0
+SFX_FAR: float = 14.0
 
 # ---------------- Window / timing ----------------
 SCREEN_W: int = 1600
@@ -59,15 +69,12 @@ DRILL_CARS: list[tuple[str, Path, Path]] = [
 ]
 
 # ---------------- Models ----------------
-LEVER_MODEL: Path = MODELS_DIR / "lever.obj"
-LEVER_POS: pr.Vector3 = pr.Vector3(0, 2, 0)
-VALVE_MODEL: Path = MODELS_DIR / "Valve.obj"
-VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
 # Decorations modelled in place in a car (same origin as the car), drawn and lit: (car, file, solid). `solid` is
 # its collision model (the player is stopped by it), or None to walk through it.
 DECORATIONS: list[tuple[str, str, str | None]] = [
     ("control_room", "Control_Rooms/Posters.obj", None),   # oxygen and temperature posters on the front wall
     ("oxygen_room", "Oxygen_Rooms/Posters_Oxygen_Room.obj", None),   # labels on the tanks, valves and dials
+    ("engine_room", "Engine_Rooms/Engine_Room_Posters.obj", None),   # "výkon motoru" on the back wall
 ]
 # Items modelled at their own origin, placed at the car's position + offset; drawn and lit, not solid:
 # (car, file, offset).
@@ -89,7 +96,7 @@ SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
     ("control_room", "Control_Rooms/Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
     ("control_room", "Control_Rooms/Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
 ]
-# Valves (src/interactable.py), grabbed and turned like VALVE_MODEL: (car, file).
+# Valves (src/interactable.py), grabbed and turned by moving the mouse left / right: (car, file).
 VALVES: list[tuple[str, str]] = [
     ("oxygen_room", "Oxygen_Rooms/Oxygen_Valve.glb"),
     ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),   # TODO: exported at the same spot as Oxygen_Valve
@@ -101,12 +108,15 @@ VALVES: list[tuple[str, str]] = [
 SWITCHES: list[tuple[str, str, float]] = [
     # back wall, flip from up to down
     *[("control_room", f"Control_Rooms/Breaker_{i}.glb", 180.0) for i in range(1, 6)],
-    ("control_room", "Control_Rooms/Power_Lever.glb", -90.0),   # console, twists a quarter turn
 ]
-LEVER_FLIP_TIME: float = 0.25   # seconds a lever / switch takes to swing over
+# Press buttons (Button in src/interactable.py): a click swings them there and back. (car, file, name, degrees).
+BUTTONS: list[tuple[str, str, str, float]] = [
+    ("control_room", "Control_Rooms/Power_Lever.glb", "power_button", -90.0),   # console, twists a quarter turn
+]
+LEVER_FLIP_TIME: float = 0.25   # seconds a lever / switch takes to swing over (a button: each way)
 # Spinning parts (src/spinner.py): (car, file, degrees / s).
 SPINNERS: list[tuple[str, str, float]] = [
-    ("engine_room", "Engine_Rooms/Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
+    ("engine_room", "Engine_Rooms/Engine_Spin.glb", 0.0),   # the motor: src/engine.py sets its speed
 ]
 # Which car's lamp each breaker switches (up = on). The light changes as the handle passes halfway.
 BREAKER_LAMPS: dict[str, str] = {
@@ -118,10 +128,43 @@ BREAKER_LAMPS: dict[str, str] = {
 }
 DIAL_NEEDLE_SPEED: float = 4.0   # how fast needles follow their value (higher = snappier, ~1/s to settle)
 
+# ---------------- Engine (src/engine.py) ----------------
+# The engine valve sets the motor's power: 0..ENGINE_VALVE_TURNS turns = 0..100 %. The power button restarts it.
+ENGINE_VALVE: str = "engine_valve"
+ENGINE_BUTTON: str = "power_button"
+ENGINE_SPINNER: str = "engine_spin"
+ENGINE_DIAL: str = "power_dial"          # shows how fast it turns
+# Needle angles (clockwise from its modelled pose, straight up) at the edges of the red sector on the power dial's
+# face: 0 % sits at the first, ENGINE_MIN_POWER (30 %) at the second, so the needle is in the red while it dies;
+# 30..100 % takes the rest of the face, all the way round to the first edge again.
+ENGINE_DIAL_RED: tuple[float, float] = (145.0, 215.0)
+ENGINE_SOUND: str = "engine"             # the SOUND_SOURCES entry (file name without extension)
+ENGINE_VALVE_TURNS: float = 2.0
+ENGINE_START_POWER: float = 0.6
+ENGINE_MIN_POWER: float = 0.3            # once its speed drops below this it dies and the alarm goes
+ENGINE_RESTART_POWER: float = 0.4        # the power button restarts it and turns the valve at least this open
+ENGINE_RESTART_VALVE_SPIN: float = 180.0 # degrees / s the valve turns itself up to that after a restart
+ENGINE_SPIN_UP: float = 0.05             # how fast its speed follows the valve up (fraction of full speed / s)
+ENGINE_SPIN_DOWN: float = 0.04           # and down (100 % -> 30 % in ~18 s: time to turn it back up)
+ENGINE_COAST_RATE: float = 0.015         # how fast it slows down once it died (30 % -> stopped in 20 s)
+ENGINE_MAX_SPIN: float = 360.0           # degrees / s the engine model turns at full speed
+ENGINE_SOUND_VOLUME: float = 1.0         # at full speed
+ENGINE_SOUND_PITCH: tuple[float, float] = (0.5, 1.1)   # at standstill, at full speed
+
+# ---------------- Alarm (src/alarm.py) ----------------
+# While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
+ALARM_COLOR: pr.Color = pr.Color(255, 30, 20, 255)
+ALARM_FILL_COLOR: tuple[float, float, float] = (1.0, 0.15, 0.1)   # tints the lit cars red (white = normal)
+ALARM_BLINK: float = 1.5            # flashes per second
+ALARM_SOUND: str = "error-warning.wav"
+ALARM_NEAR: float = 3.0             # the beep is full volume this close to the lamp,
+ALARM_FAR: float = 12.0             # and gone this far (from a dark car the next lit one is quiet)
+
 # ---------------- Faults (src/faults.py) ----------------
-# Every FAULT_INTERVAL seconds (a random time in that range) something has a FAULT_CHANCE to break.
-FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)
-FAULT_CHANCE: float = 0.25   # 0 = nothing ever breaks, 1 = something breaks every time
+# Each kind of fault: every <interval> seconds (a random time in that range) it has a <chance> to happen.
+LIGHT_FAULT_INTERVAL: tuple[float, float] = (60.0, 120.0)   # a random breaker flips (always)
+FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)           # for the faults still to come (valves)
+FAULT_CHANCE: float = 0.25
 
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness of a car with its lamp on, where the lamp doesn't reach (0 = black)
@@ -149,7 +192,6 @@ VIGNETTE_SOFTNESS: float = 0.45   # and reaches full strength this much further 
 # ---------------- Interactables ----------------
 VALVE_TURN_SPEED: float = 0.1    # degrees per pixel of left / right mouse movement while holding a valve
 VALVE_BREAK_SPIN: float = 90.0   # degrees / s a broken valve turns on its own (valve.spin)
-VALVE_BREAK_TEST_AT: float | None = None   # test: seconds after start the valve breaks and spins open; None = never
 
 # ---------------- Player cuboid ----------------
 PLAYER_HALF: pr.Vector3 = pr.Vector3(0.4, 0.75, 0.4)
