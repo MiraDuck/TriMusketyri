@@ -30,6 +30,12 @@ WINDOW_TITLE: str = "TriMusketyri"
 TARGET_FPS: int = 0          # 0 = uncapped; everything scales with frame time
 MAX_DT: float = 0.05         # clamp long frames (window drag, load hitch) so physics can't tunnel
 
+# ---------------- Main menu (src/menu.py) ----------------
+# Background frames, shown in turn; all the same size, with the title in the same place (the buttons go under it).
+MENU_BACKGROUNDS: list[Path] = [MODELS_DIR / "Textures" / f"menu_{i}.png" for i in (1, 2, 3)]
+MENU_FRAME_TIME: float = 0.1   # seconds each frame is shown
+MENU_MUSIC: Path = MUSIC_DIR / "PrototypeMainTheme.mp3"   # loops while the menu is open
+
 # ---------------- Camera / input ----------------
 START_POSITION: pr.Vector3 = pr.Vector3(0.0, 2.8, -2.5)   # control room, lower half, facing the front
 START_TARGET: pr.Vector3 = pr.Vector3(0.0, 2.8, 0.0)
