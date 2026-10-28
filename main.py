@@ -14,6 +14,7 @@ from src.entity import Entity
 from src.head_bob import HeadBob
 from src.interactable import Interactable, Lever, Valve
 from src.lighting import Lamp, Light, Lighting
+from src.menu import MainMenu, MenuChoice
 from src.player import Player
 from src.render import draw_hud, draw_scene
 from src.vignette import Vignette
@@ -31,8 +32,17 @@ def drill_cars() -> list[Entity]:
 def main() -> None:
     pr.set_trace_log_level(pr.TraceLogLevel.LOG_WARNING)
     pr.init_window(config.SCREEN_W, config.SCREEN_H, config.WINDOW_TITLE)
-    pr.disable_cursor()
     pr.set_target_fps(config.TARGET_FPS)
+    audio = Audio(config.AMBIENCE_DIR)
+    audio.play_music(config.MENU_MUSIC)
+    menu = MainMenu()
+    choice = menu.run(audio)
+    menu.unload()
+    if choice == MenuChoice.QUIT:
+        audio.unload()
+        pr.close_window()
+        return
+    pr.disable_cursor()
 
     # `camera` is the player's real position (input and physics move it); what we draw from is a copy of it
     # with head bob added (view_camera below), so the bob can never affect collision.
@@ -45,7 +55,7 @@ def main() -> None:
     )
     camera_mode: int = pr.CameraMode.CAMERA_FIRST_PERSON
 
-    audio = Audio(config.AMBIENCE_DIR)
+    audio.stop_music()   # the menu theme
     if config.START_MUSIC:
         audio.play_music(config.START_MUSIC)
     for filename, pos, volume, near, far, floor in config.SOUND_SOURCES:
