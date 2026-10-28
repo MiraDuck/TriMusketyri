@@ -17,8 +17,9 @@ MODE_NAMES: dict[int, str] = {
 }
 
 
-def draw_entity(entity: Entity, camera: pr.Camera3D, debug: DebugOptions) -> None:
-    """Visible model (or its collision mesh in debug), then the optional wireframe and hitbox."""
+def draw_entity(entity: Entity, camera: pr.Camera3D, debug: DebugOptions, inspected: bool = False) -> None:
+    """Visible model (or its collision mesh in debug), then the optional wireframe and hitbox
+    (yellow if it is the one whose details are shown)."""
     collider = entity.collider
     show_mesh = debug.collision_meshes and collider is not None
     model = collider.model if show_mesh and collider else entity.model
@@ -29,7 +30,7 @@ def draw_entity(entity: Entity, camera: pr.Camera3D, debug: DebugOptions) -> Non
     if debug.hitboxes:
         # solid things are always green; non-solid ones go red until you look at them
         ok = entity.solid or entity.is_targeted(camera)
-        pr.draw_bounding_box(entity.bounds, pr.GREEN if ok else pr.RED)
+        pr.draw_bounding_box(entity.bounds, pr.YELLOW if inspected else pr.GREEN if ok else pr.RED)
 
 
 def draw_scene(
@@ -39,14 +40,16 @@ def draw_scene(
     entities: Iterable[Entity],
     lights: Iterable[Light],
     debug: DebugOptions,
+    inspected: Entity | None = None,
 ) -> None:
     """view_camera (with head bob) is what we render from; camera is the player's real camera, used for targeting.
-    With hitboxes on, also the player box and each light as a small sphere in its colour."""
+    With hitboxes on, also the player box and each light as a small sphere in its colour; `inspected` (what you
+    look at) gets a yellow box."""
     pr.begin_mode_3d(view_camera)
 
     pr.draw_plane(pr.Vector3(0.0, 0.0, 0.0), pr.Vector2(32.0, 32.0), pr.LIGHTGRAY)
     for entity in entities:
-        draw_entity(entity, camera, debug)
+        draw_entity(entity, camera, debug, entity is inspected)
 
     if debug.hitboxes:
         for light in lights:
@@ -57,7 +60,9 @@ def draw_scene(
     pr.end_mode_3d()
 
 
-def draw_hud(camera: pr.Camera3D, camera_mode: int, player: Player, debug: DebugOptions) -> None:
+def draw_hud(
+    camera: pr.Camera3D, camera_mode: int, player: Player, debug: DebugOptions, inspected: Entity | None = None
+) -> None:
     # Laid out for a SCREEN_H tall window and scaled by s, so it keeps its size and place in fullscreen.
     w, h = pr.get_screen_width(), pr.get_screen_height()
     s = h / config.SCREEN_H
@@ -91,5 +96,12 @@ def draw_hud(camera: pr.Camera3D, camera_mode: int, player: Player, debug: Debug
                              ("NO VIGNETTE", debug.no_vignette)) if on]
     if flags:
         text("DEBUG: " + " + ".join(flags), 10, 165, color=pr.RED)
+
+    if inspected is not None:   # with hitboxes on: details of what you look at
+        lines = inspected.debug_lines()
+        width = max(pr.measure_text(line, 10) for line in lines) + 20
+        rect(5, 185, width, 15 * len(lines) + 10, pr.fade(pr.BLACK, 0.6))
+        for i, line in enumerate(lines):
+            text(line, 15, 192 + 15 * i, color=pr.YELLOW if i == 0 else pr.RAYWHITE)
 
     pr.draw_circle(w // 2, h // 2, 4 * s, pr.WHITE)   # crosshair

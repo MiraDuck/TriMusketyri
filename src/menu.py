@@ -27,13 +27,13 @@ class MenuChoice(Enum):
 
 
 # In pixels of the background images (1500 x 1000), so the buttons stay under the title at any window size.
-BUTTONS_CENTER_X: float = 1083   # middle of the C.O.R.E. sign
-BUTTONS_TOP: float = 615         # just below it
+BUTTONS_CENTER_X: float = 1080   # middle of the C.O.R.E. sign
+BUTTONS_TOP: float = 620         # just below it
 BUTTON_W: float = 380
-BUTTON_H: float = 64
+BUTTON_H: float = 60
 BUTTON_GAP: float = 20
-BUTTON_BORDER: float = 6
-BUTTON_TEXT_SIZE: int = 34
+BUTTON_BORDER: float = 5
+BUTTON_TEXT_SIZE: int = 30
 
 BACKGROUND: pr.Color = pr.Color(18, 18, 18, 255)   # behind the image, only seen while the textures are missing
 GREEN: pr.Color = pr.Color(139, 189, 85, 255)      # the title's letters

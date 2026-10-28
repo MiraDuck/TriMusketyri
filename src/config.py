@@ -33,7 +33,7 @@ MAX_DT: float = 0.05         # clamp long frames (window drag, load hitch) so ph
 # ---------------- Main menu (src/menu.py) ----------------
 # Background frames, shown in turn; all the same size, with the title in the same place (the buttons go under it).
 MENU_BACKGROUNDS: list[Path] = [MODELS_DIR / "Textures" / f"menu_{i}.png" for i in (1, 2, 3)]
-MENU_FRAME_TIME: float = 0.1   # seconds each frame is shown
+MENU_FRAME_TIME: float = 0.3   # seconds each frame is shown
 MENU_MUSIC: Path = MUSIC_DIR / "PrototypeMainTheme.mp3"   # loops while the menu is open
 
 # ---------------- Camera / input ----------------
@@ -43,6 +43,7 @@ CAMERA_FOVY: float = 60.0
 PLAYER_SPEED: float = 3.6    # units / second
 MOUSE_SENSITIVITY: float = 0.05
 ZOOM_SPEED: float = 2.0      # mouse wheel, free camera only
+DEBUG_REACH: float = 20.0    # with hitboxes on (F1), how far away the thing you look at gets its details shown
 
 # ---------------- Drill ----------------
 # Cars from the front backwards: (name, visible model, collision model). The first sits at DRILL_POS and each
@@ -64,10 +65,37 @@ LEVER_MODEL: Path = MODELS_DIR / "lever.obj"
 LEVER_POS: pr.Vector3 = pr.Vector3(0, 2, 0)
 VALVE_MODEL: Path = MODELS_DIR / "Valve.obj"
 VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
-# Dials (src/dial.py) are modelled in place in their room, so they are placed at the car's position.
-TEMP_PRESSURE_DIAL_MODEL: Path = MODELS_DIR / "Temperature_Pressure.glb"   # needle on the control room console
-TEMP_PRESSURE_RANGE: tuple[float, float] = (0.0, 100.0)   # value at the modelled needle pose, value at full sweep
-TEMP_PRESSURE_SWEEP: float = 360.0                        # degrees the needle travels from low to high
+# Moving parts: rigged .glb files modelled in place in a car (same origin as the car), so each is placed at the
+# position of the car it names (see DRILL_CARS). The entity's name is the file name in lower case (oxygen_level).
+# Dials (src/dial.py): (car, file, low, high, sweep in degrees). The modelled needle pose shows `low`.
+DIALS: list[tuple[str, str, float, float, float]] = [
+    ("control_room", "Temperature_Pressure.glb", 0.0, 100.0, 360.0),   # console, left
+    ("control_room", "Oxygen_Pressure.glb", 0.0, 100.0, 360.0),        # console, right
+    ("control_room", "Power_Dial.glb", 0.0, 100.0, 360.0),             # flat gauge on the console
+    ("oxygen_room", "Oxygen_Dial.glb", 0.0, 100.0, 360.0),
+    ("oxygen_room", "Temperature_Dial.glb", 0.0, 100.0, 360.0),
+]
+# Sliding dials, a marker moving left / right along a straight scale (its Move animation, along the bone's -X):
+# (car, file, low, high, distance it slides from low to high). Low and high are inside the red end blocks.
+SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
+    ("control_room", "Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
+    ("control_room", "Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
+]
+# Valves (src/interactable.py), grabbed and turned like VALVE_MODEL: (car, file).
+VALVES: list[tuple[str, str]] = [
+    ("oxygen_room", "Oxygen_Valve.glb"),
+    ("oxygen_room", "Temperature_Valve.glb"),
+]
+# Levers / switches / breakers (src/interactable.py): (car, file, degrees they swing when pulled down).
+SWITCHES: list[tuple[str, str, float]] = [
+    *[("control_room", f"Breaker_{i}.glb", 180.0) for i in range(1, 6)],   # back wall, flip from up to down
+    ("control_room", "Power_Lever.glb", -90.0),                            # console, twists a quarter turn
+]
+LEVER_FLIP_TIME: float = 0.25   # seconds a lever / switch takes to swing over
+# Spinning parts (src/spinner.py): (car, file, degrees / s).
+SPINNERS: list[tuple[str, str, float]] = [
+    ("engine_room", "Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
+]
 DIAL_NEEDLE_SPEED: float = 4.0   # how fast needles follow their value (higher = snappier, ~1/s to settle)
 
 # ---------------- Lighting (src/lighting.py) ----------------
@@ -93,7 +121,7 @@ VIGNETTE_RADIUS: float = 0.3      # darkening starts this far from the centre (0
 VIGNETTE_SOFTNESS: float = 0.45   # and reaches full strength this much further out (the corners are at ~0.71)
 
 # ---------------- Interactables ----------------
-VALVE_TURN_SPEED: float = 0.5    # degrees per pixel of left / right mouse movement while holding a valve
+VALVE_TURN_SPEED: float = 0.1    # degrees per pixel of left / right mouse movement while holding a valve
 VALVE_BREAK_SPIN: float = 90.0   # degrees / s a broken valve turns on its own (valve.spin)
 VALVE_BREAK_TEST_AT: float | None = None   # test: seconds after start the valve breaks and spins open; None = never
 

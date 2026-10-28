@@ -71,6 +71,13 @@ class Lamp(Entity):
     def update(self, time: float) -> None:
         self.tint = LAMP_ON_TINT if self.light.strength(time) > 0 else LAMP_OFF_TINT
 
+    def debug_lines(self) -> list[str]:
+        light = self.light
+        return super().debug_lines() + [
+            f"light: {'on' if light.on else 'off'}, colour {light.color}, intensity {light.intensity:g}, "
+            f"range {light.range:g}, blink {light.blink:g}/s"
+        ]
+
 
 class Lighting:
     """Needs an open window (load_shader needs a GL context)."""

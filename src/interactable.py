@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pyray as pr
 
-from .config import VALVE_TURN_SPEED
-from .entity import Entity, rotation_about
+from .config import LEVER_FLIP_TIME, VALVE_TURN_SPEED
+from .entity import Entity, bone_pivot_axis, rotation_about
 
 
 class Interactable(Entity):
@@ -35,15 +35,34 @@ class Interactable(Entity):
 
 
 class Lever(Interactable):
-    """Two states: up (False) and down (True)."""
+    """Two states: up (False, as modelled) and down (True). Breakers and switches are levers too.
 
-    def __init__(self, *args, **kwargs) -> None:
+    A rigged one (.glb) swings `throw` degrees about its bone's Y axis when pulled down (negative = the other way),
+    taking LEVER_FLIP_TIME; `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
+    """
+
+    def __init__(self, *args, throw: float = 0.0, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.down: bool = False
+        self.throw: float = throw
+        self.angle: float = 0.0
+        self.pivot, self.axis = bone_pivot_axis(self.model) if throw else (None, None)
 
     def interact(self) -> None:
         self.down = not self.down
         print(f"{self.name}: {'down' if self.down else 'up'}")
+
+    def update(self, dt: float) -> None:
+        if self.pivot is None:
+            return
+        target = self.throw if self.down else 0.0
+        step = abs(self.throw) / LEVER_FLIP_TIME * dt
+        self.angle = min(self.angle + step, target) if self.angle < target else max(self.angle - step, target)
+        self.set_transform(rotation_about(self.pivot, self.axis, self.angle))
+
+    def debug_lines(self) -> list[str]:
+        moving = f", angle {self.angle:.0f} of {self.throw:.0f} deg" if self.pivot is not None else ""
+        return super().debug_lines() + [f"down: {self.down}{moving}"]
 
 
 class Valve(Interactable):
@@ -57,20 +76,22 @@ class Valve(Interactable):
         valve.spin = VALVE_BREAK_SPIN    # broken: starts opening by itself
         valve.spin = 0.0                 # repaired
 
-    The model rotates about `axis` (model space) through the centre of its box.
+    A rigged one (.glb) turns about its bone's Y axis through its head; otherwise about `axis` (model space)
+    through the centre of its box.
     """
 
     grabbable = True
 
     def __init__(self, *args, axis: pr.Vector3 = pr.Vector3(0.0, 0.0, 1.0), **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.axis: pr.Vector3 = axis
         self.angle: float = 0.0
         self.spin: float = 0.0
-        bb = pr.get_model_bounding_box(self.model)
-        self.pivot: pr.Vector3 = pr.Vector3(
-            (bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2
-        )
+        if self.model.skeleton.boneCount:
+            self.pivot, self.axis = bone_pivot_axis(self.model)
+        else:
+            bb = pr.get_model_bounding_box(self.model)
+            self.pivot = pr.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2)
+            self.axis = axis
         self._facing: float = 1.0   # -1 if the axis points at the player (flips the turn direction)
 
     @property
@@ -91,7 +112,11 @@ class Valve(Interactable):
     def release(self) -> None:
         print(f"{self.name}: {self.angle:.0f} deg ({self.turns:.2f} turns open)")
 
+    def debug_lines(self) -> list[str]:
+        state = f"angle: {self.angle:.1f} deg ({self.turns:.2f} turns), spin {self.spin:g} deg/s"
+        return super().debug_lines() + [state]
+
     def update(self, dt: float) -> None:
         if self.spin:
             self.turn(self.spin * dt)
-        self.model.transform = rotation_about(self.pivot, self.axis, self.angle)
+        self.set_transform(rotation_about(self.pivot, self.axis, self.angle))

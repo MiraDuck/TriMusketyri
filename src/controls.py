@@ -55,7 +55,7 @@ def handle_interaction(
     interactables: Iterable[Interactable],
     held: Interactable | None,
 ) -> Interactable | None:
-    """Left click uses the interactable you are looking at (the closest, if several).
+    """Left click uses the interactable you are looking at (the nearest, if several).
     A grabbable one stays held while the button is down and gets the mouse movement.
     Returns what is held now (None = nothing, mouse look is on)."""
     left = pr.MouseButton.MOUSE_BUTTON_LEFT
@@ -69,10 +69,11 @@ def handle_interaction(
 
     if not pr.is_mouse_button_pressed(left):
         return None
-    targeted = [i for i in interactables if i.is_targeted(camera)]
-    if not targeted:
+    # the first hitbox the view ray hits (parts modelled in place all share their car's pos, so not by pos)
+    hits = [(d, i) for i in interactables if (d := i.target_distance(camera)) is not None]
+    if not hits:
         return None
-    target = min(targeted, key=lambda i: pr.vector3_distance(camera.position, i.pos))
+    target = min(hits, key=lambda hit: hit[0])[1]
     if target.grabbable:
         target.grab(camera)
         return target
