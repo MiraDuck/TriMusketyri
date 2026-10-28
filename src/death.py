@@ -1,7 +1,8 @@
 """Death: mission failed. Either the motor stopped for good (the lights die, the engine fails and the drill
 explodes) or you passed out (life support). The death screen shows the run's report; type your name and save it.
 
-    death = Death(audio, "engine-faliure-explosion")   # a loaded sound, for the explosion
+    death = Death(audio, "engine-faliure-explosion", "EarsRinging-YoPhoneLinging")   # loaded sounds: the
+                                                    # explosion, the ringing after the bang
     death.start(cause, depth, time, explode=True)   # what failed and the last reported depth (None: no report
                                                     # sent), how long you survived (does nothing if started)
     death.update(dt)               # every frame
@@ -12,7 +13,7 @@ explodes) or you passed out (life support). The death screen shows the run's rep
 
 Explosion (seconds from start): the failure sound rumbles and the view shakes more and more (the player can still
 move, in the dark); at DEATH_EXPLOSION_AT (where the bang is in the sound) every looping sound and the music stop,
-the screen flashes DEATH_FLASH_COLOR and fades to black.
+the screen flashes DEATH_FLASH_COLOR and fades to black, and your ears ring (quietly, EARS_RINGING_VOLUME).
 Passing out: the screen fades to black over PASS_OUT_FADE (the eyes closing, more to come), then the sounds stop.
 Then the same death screen: DEATH_TITLE and the run's report (records.py: name, time survived, the last reported
 depth, the expected cause; both unknown without a report) fade in DEATH_TEXT_AT later. The name starts as the last saved run's; type to change it (Backspace deletes). From
@@ -29,15 +30,16 @@ from .audio import Audio
 from .config import (
     DEATH_CONTINUE_AT, DEATH_EXPLOSION_AT, DEATH_FLASH_COLOR, DEATH_FLASH_TIME, DEATH_NAME_LENGTH, DEATH_NO_REPORT,
     DEATH_SHAKE,
-    DEATH_TEXT_AT, DEATH_TITLE, DEATH_UNNAMED, PASS_OUT_FADE, SCREEN_H,
+    DEATH_TEXT_AT, DEATH_TITLE, DEATH_UNNAMED, EARS_RINGING_VOLUME, PASS_OUT_FADE, SCREEN_H,
 )
 from .records import Run, draw_record, last_name, save_run
 
 
 class Death:
-    def __init__(self, audio: Audio, sound: str) -> None:
+    def __init__(self, audio: Audio, sound: str, ringing: str) -> None:
         self.audio: Audio = audio
         self.sound: str = sound
+        self.ringing: str = ringing
         self.active: bool = False
         self.explode: bool = False
         self.run: Run | None = None   # the report, once started
@@ -76,6 +78,8 @@ class Death:
             for source in self.audio.sources.values():
                 source.volume = 0.0
             self.audio.stop_music()
+            if self.explode:
+                self.audio.play_sound(self.ringing, self.audio.sfx_volume * EARS_RINGING_VOLUME)
         if not self.over or self.since_over < DEATH_TEXT_AT or self.finished:
             return
         self._type_name()

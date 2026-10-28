@@ -99,6 +99,7 @@ def play(audio: Audio) -> bool:
     death_sound = audio.load_sound(config.DEATH_SOUND)
     step_sound = audio.load_sound(config.STEP_SOUND)
     breath_sound = audio.load_sound(config.BREATH_SOUND)
+    ringing_sound = audio.load_sound(config.EARS_RINGING_SOUND)
     repair_sound = audio.load_sound(config.PIPE_REPAIR_SOUND)
     take_sound = audio.load_sound(config.COAL_TAKE_SOUND)
     feed_sound = audio.load_sound(config.COAL_FEED_SOUND)
@@ -170,6 +171,11 @@ def play(audio: Audio) -> bool:
                        regulator("cooling", config.COOLING_PARTS, config.COOLING_COUPLING, config.COOLING_START,
                                  inverted=True))
     systems = {"oxygen": life.oxygen, "cooling": life.cooling}
+    # the air you can hear: the oxygen from its tank, the cooling from every car's vent (volumes set every frame)
+    airs = [(audio.add_source(config.AIR_FLOW_SOUND, valves[config.OXYGEN_PARTS[0]].center, 0.0,
+                              *config.AIR_FLOW_RANGE, name="air_oxygen"), life.oxygen, config.AIR_FLOW_VOLUME)]
+    airs += [(audio.add_source(config.AIR_VENT_SOUND, lamp.pos, 0.0, *config.AIR_VENT_RANGE, name=f"air_{car.name}"),
+              life.cooling, config.AIR_VENT_VOLUME) for car, lamp in zip(cars, lamps)]
     pipe_parts = [Pipe(f"{Path(f).stem.lower()}_{car}", models / f, models / burst, car_pos[car], systems[system],
                        crack, car_zone(car_pos[car].z))
                   for car, system, f, burst, crack in config.PIPES]
@@ -182,7 +188,7 @@ def play(audio: Audio) -> bool:
         lighting.add(pipe.burst_model)
     fog = pr.Color(*(int(c * 255) for c in config.FOG_COLOR), 255)   # also behind everything
     alarm = Alarm(lamps, audio, alarm_sound)
-    death = Death(audio, death_sound)
+    death = Death(audio, death_sound, ringing_sound)
     screens = Screens(car_pos["control_room"])
     call = Call(audio, audio.load_sound(config.INTRO_CALL))   # the phone call: the drill waits until it's over
     computer = Computer(switches["computer_lever"], car_pos[config.COMPUTER_CAR], audio, call)
@@ -202,6 +208,7 @@ def play(audio: Audio) -> bool:
     back_to_menu = False
     paused = False
     survived = 0.0   # seconds played (not paused), for the run's report
+    ears_ringing = False   # rang since the strain last climbed (re-armed once it is low again)
     view_camera = camera
     while not pr.window_should_close():
         dt: float = min(pr.get_frame_time(), config.MAX_DT)
@@ -281,6 +288,17 @@ def play(audio: Audio) -> bool:
                 audio.play_sound(breath_sound, audio.sfx_volume * volume)
             elif audio.is_sound_playing(breath_sound):
                 audio.set_sound_volume(breath_sound, volume)
+            # and your ears ring (quietly) as it gets close, once each time
+            if ears_ringing and life.strain < config.BREATH_FROM:
+                ears_ringing = False
+            elif not ears_ringing and life.strain > config.EARS_RINGING_FROM:
+                ears_ringing = True
+                audio.play_sound(ringing_sound, audio.sfx_volume * config.EARS_RINGING_VOLUME)
+            # the air: louder and higher the harder its system pushes
+            low, high = config.AIR_PITCH
+            for name, system, loudness in airs:
+                audio.sources[name].volume = loudness * system.pressure
+                audio.sources[name].pitch = low + (high - low) * system.pressure
 
             # ---- player ----
             if camera_mode == pr.CameraMode.CAMERA_FIRST_PERSON:

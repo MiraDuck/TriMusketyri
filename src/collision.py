@@ -8,6 +8,8 @@ from typing import Callable
 
 import pyray as pr
 
+from .config import ROOT
+
 NormalTest = Callable[[pr.Vector3], bool]
 
 
@@ -30,12 +32,13 @@ def load_geometry(path: str | Path) -> pr.Model:
     textures, and raylib can hang forever on an .mtl with 10+ materials (DEVNOTES, Assets)."""
     lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     kept = [line for line in lines if not line.startswith(("mtllib", "usemtl"))]
-    # raylib only loads models from a file path, so write the stripped copy to a temporary file
-    fd, tmp = tempfile.mkstemp(suffix=".obj")
+    # raylib only loads models from a file path, so write the stripped copy to a temporary file, in the project folder:
+    # the system's temp folder is under the user's name, which can have accents raylib can't open (config.ROOT)
+    fd, tmp = tempfile.mkstemp(suffix=".obj", dir=ROOT)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(kept))
     try:
-        return pr.load_model(tmp)
+        return pr.load_model(str(ROOT / Path(tmp).name))   # (mkstemp's path is always absolute: ROOT may not be)
     finally:
         os.remove(tmp)
 

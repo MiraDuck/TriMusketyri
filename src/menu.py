@@ -47,12 +47,19 @@ class MainMenu:
         self.options: tuple[MenuChoice, ...] = options
         self.hovered: int | None = None   # index of the button under the mouse
         self.backgrounds: list[pr.Texture] = [pr.load_texture(str(path)) for path in config.MENU_BACKGROUNDS]
+        missing = [path.name for path, texture in zip(config.MENU_BACKGROUNDS, self.backgrounds) if not texture.width]
+        if missing:   # (a failed load is 0 x 0: don't scale by it)
+            print(f"WARNING: menu backgrounds failed to load: {', '.join(missing)}")
+        self.backgrounds = [texture for texture in self.backgrounds if texture.width]
         for texture in self.backgrounds:
             pr.set_texture_filter(texture, pr.TextureFilter.TEXTURE_FILTER_BILINEAR)
 
     def _image_rect(self) -> tuple[float, float, float]:
         """(x, y, scale): where the background's top-left lands on screen and how much it is scaled to cover it."""
         w, h = pr.get_screen_width(), pr.get_screen_height()
+        if not self.backgrounds:   # none loaded: lay the buttons out as if the image filled the height
+            scale = h / 1000
+            return (w - 1500 * scale) / 2, 0.0, scale
         image = self.backgrounds[0]
         scale = max(w / image.width, h / image.height)
         return (w - image.width * scale) / 2, (h - image.height * scale) / 2, scale
@@ -83,6 +90,8 @@ class MainMenu:
         """The cycling pictures, covering the window (also behind the statistics)."""
         x, y, s = self._image_rect()
         pr.clear_background(BACKGROUND)
+        if not self.backgrounds:
+            return
         frame = int(pr.get_time() / config.MENU_FRAME_TIME) % len(self.backgrounds)
         pr.draw_texture_ex(self.backgrounds[frame], pr.Vector2(x, y), 0.0, s, pr.WHITE)
 

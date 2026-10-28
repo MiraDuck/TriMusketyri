@@ -1,8 +1,8 @@
 """Audio: one streamed music track at a time, any number of short sounds, and looping sounds placed in the world.
 
     audio = Audio()                      # after init_window
-    audio.play_music("ambience.wav")     # file in Music/, loops
-    audio.load_sound("walk.wav")         # file in SFX/, referred to as "walk"
+    audio.play_music("ambience.wav")     # file in audio/Music/, loops
+    audio.load_sound("walk.wav")         # file in audio/SFX/, referred to as "walk"
     audio.play_sound("walk")
     audio.add_source("engine.wav", pr.Vector3(0, 3, 8), near=6, far=14)   # loops at that spot
     audio.play_sound_at("valve-turn", pos, camera)   # a loaded sound, from a spot in the world
@@ -26,9 +26,9 @@ SOURCE_PAN: float = 0.7   # how far a sound beside you pans (1 = only in one ear
 
 
 def _resolve(directory: Path, name: str | Path) -> Path:
-    path = Path(name)
-    if not path.is_absolute():
-        path = directory / name
+    """A file name (str) is in `directory`; a Path (from config) is already where the file is. (config.ROOT can be
+    relative, so a relative Path doesn't mean "in `directory`".)"""
+    path = name if isinstance(name, Path) else directory / name
     if not path.is_file():
         raise FileNotFoundError(f"audio file not found: {path}")
     return path
@@ -107,7 +107,7 @@ class Audio:
 
     # ---------------- Music ----------------
     def play_music(self, name: str | Path, volume: float | None = None, loop: bool = True) -> None:
-        """Start streaming a track from Music/, replacing the current one."""
+        """Start streaming a track from the music folder, replacing the current one."""
         self.stop_music()
         path = _resolve(self.music_dir, name)
         self.music = pr.load_music_stream(str(path))
@@ -181,7 +181,7 @@ class Audio:
         return name
 
     def load_all_sounds(self) -> list[str]:
-        """Load every audio file in SFX/. Returns the list of names."""
+        """Load every audio file in audio/SFX/. Returns the list of names."""
         for path in sorted(self.sfx_dir.iterdir()):
             if path.suffix.lower() in SOUND_EXTENSIONS:
                 self.load_sound(path.name)

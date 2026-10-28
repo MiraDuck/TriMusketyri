@@ -1,20 +1,29 @@
 """All tunable constants in one place."""
+import os
 from pathlib import Path
 
 import pyray as pr
 
 ROOT: Path = Path(__file__).resolve().parent.parent
+# raylib on Windows can't open a path with accents (C:/Users/Jiří/Stažené soubory/...): every texture, model and sound
+# fails to load (the menu then divided by a 0-wide texture). Then work from inside the project folder, so raylib gets
+# relative, ASCII paths.
+if not str(ROOT).isascii():
+    os.chdir(ROOT)
+    ROOT = Path(".")
 MODELS_DIR: Path = ROOT / "Models"
-AMBIENCE_DIR: Path = ROOT / "ambience"
-MUSIC_DIR: Path = ROOT / "Music"
-SFX_DIR: Path = ROOT / "SFX"
+AUDIO_DIR: Path = ROOT / "audio"
+AMBIENCE_DIR: Path = AUDIO_DIR / "ambience"
+MUSIC_DIR: Path = AUDIO_DIR / "Music"
+SFX_DIR: Path = AUDIO_DIR / "SFX"
+VOICES_DIR: Path = AUDIO_DIR / "voices"
 SHADERS_DIR: Path = ROOT / "Shaders"
 
 # ---------------- Audio ----------------
 START_MUSIC: str = "ambience.wav"    # file in AMBIENCE_DIR played on launch ("" = none)
 MUSIC_VOLUME: float = 1.0
 SFX_VOLUME: float = 1.0
-# Looping sounds placed in the world: (file in SFX/, position, volume, near, far, floor). Full volume within `near`
+# Looping sounds placed in the world: (file in audio/SFX/, position, volume, near, far, floor). Full volume within `near`
 # units of the player, fading smoothly to `floor` (fraction of the volume that is always heard; 0 = silent) at
 # `far`. Walls don't block sound, so set `far` to where it should be gone. Cars are 8 long: the control room is
 # z -4..4, the next car z -4..-12, and so on.
@@ -256,6 +265,20 @@ BREATH_SOUND: str = "breath.wav"   # repeats, louder and louder, while you are a
 BREATH_FROM: float = 0.3           # starts at this much strain (0..1, life support), full volume at 1
 BREATH_VOLUME: tuple[float, float] = (4.0, 12.0)   # when it starts, at full strain (the file is very quiet: its
                                                     # loudest is ~5 % of full scale, so > 1 amplifies it)
+EARS_RINGING_SOUND: str = "EarsRinging-YoPhoneLinging.wav"   # quietly, when you are close to passing out (once each
+EARS_RINGING_FROM: float = 0.7     # time the strain climbs past this; again once it fell below BREATH_FROM), and
+EARS_RINGING_VOLUME: float = 0.12  # after the drill's bang (death.py). The file is loud.
+
+# ---------------- The air (main.py) ----------------
+# Looping sounds that follow life support's pressures (louder and higher the harder it pushes, silent at 0), so you
+# can hear a system weaken (a burst pipe, a valve drifting shut) before the gauges show it.
+AIR_FLOW_SOUND: str = "air-flowing.mp3"   # the oxygen leaving its tank, at the red oxygen valve
+AIR_FLOW_VOLUME: float = 2.0              # at full pressure (the file is quiet: its loudest is ~35 % of full scale)
+AIR_FLOW_RANGE: tuple[float, float] = (2.0, 7.0)   # near, far: the oxygen room only
+AIR_VENT_SOUND: str = "air-in-vent.wav"   # the cooling blowing in through a vent in every car's ceiling (at its lamp)
+AIR_VENT_VOLUME: float = 0.25             # at full pressure
+AIR_VENT_RANGE: tuple[float, float] = (1.5, 5.0)   # near, far: about its own car
+AIR_PITCH: tuple[float, float] = (0.8, 1.1)        # at no / full pressure
 
 # ---------------- Computer (src/computer.py) ----------------
 # The rest room's computer: during the call at the start its lever skips the call; then it wishes you luck, and
@@ -283,8 +306,8 @@ COMPUTER_MORSE_RATE: int = 44100       # samples / s
 # A phone call plays when a game starts, heard everywhere (not from a place). Nothing happens in the drill until it
 # is over: no digging, no faults, no burst pipes, no fuel burnt, oxygen and temperature hold, the time survived
 # doesn't run. Pull the computer's lever to skip it.
-INTRO_CALL: Path = ROOT / "voices" / "PhoneGuyBeginingUPGRADE.wav"   # 2:24
-INTRO_CALL_VOLUME: float = 0.45   # of the SFX volume (the recording is loud: this is a bit above the ambience)
+INTRO_CALL: Path = VOICES_DIR / "PhoneGuyBeginingUPGRADE.wav"   # 2:24
+INTRO_CALL_VOLUME: float = 1.0    # of the SFX volume (its loudest is full scale: more would clip)
 
 # ---------------- Alarm (src/alarm.py) ----------------
 # While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
@@ -355,6 +378,22 @@ HEAT_MAX: float = 0.1                  # but never more (reached at 1800 m), so 
 # more cools more (ideal temperature = 1 - its opening). Both start balanced around the middle.
 OXYGEN_START: tuple[float, float, float] = (0.5, 0.7, 0.5)
 COOLING_START: tuple[float, float, float] = (0.5, 0.55, 0.5)
+# The rock isn't even: every <spacing> metres (random in that range) the drill digs through a pocket <width> metres
+# deep, which pushes a level away for as long as the drill is in it, strongest in its middle (at 1.2 m/s a 30 m
+# pocket takes ~25 s). They go by depth, so a stopped drill stays in one. Strengths are level / s at the middle.
+HOT_SPOT_SPACING: tuple[float, float] = (60.0, 160.0)   # hot rock: heats the drill
+HOT_SPOT_WIDTH: tuple[float, float] = (20.0, 45.0)
+HOT_SPOT_HEAT: tuple[float, float] = (0.03, 0.06)       # 0.04 at the start's settings: 45 % -> ~78 % if untouched
+COLD_SPOT_CHANCE: float = 0.25                          # of the hot spots are cold (water) instead: cool as much
+GAS_POCKET_SPACING: tuple[float, float] = (120.0, 280.0)   # gas seeping in: takes the oxygen
+GAS_POCKET_WIDTH: tuple[float, float] = (20.0, 40.0)
+GAS_POCKET_OXYGEN: tuple[float, float] = (-0.01, -0.025)   # -0.02 at the start's settings: 50 % -> ~25 % in 25 s
+# And both levels always sway a little: their drift eases towards a new random offset (up to these) every
+# WOBBLE_TIME seconds, so the needles never sit still.
+HEAT_WOBBLE: float = 0.008             # temperature / s (at the start's settings ~5 % up or down)
+OXYGEN_WOBBLE: float = 0.003           # oxygen / s (~6 %)
+WOBBLE_TIME: tuple[float, float] = (2.0, 6.0)
+WOBBLE_RATE: float = 0.5               # how fast it eases towards the new offset (of the gap per s)
 
 # ---------------- Faults (src/faults.py) ----------------
 # Each kind of fault: every <interval> seconds (a random time in that range) it has a <chance> to happen.

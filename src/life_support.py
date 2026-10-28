@@ -17,16 +17,97 @@ strongly (COOLING_COUPLING), so it reacts faster and is easy to overdo: too cold
 
 The pressure itself follows its valve with a lag (LIFE_PRESSURE_RATE), less `leak` (a burst pipe, pipes.py). The
 dials show the pressure and the level, 0..100 (the level sliders' red ends are outside the safe levels).
+
+On top of that the drift moves (`Pockets`, `Wobble`): the drill digs through hot spots (cold ones sometimes) and gas
+pockets at random depths, each pushing its level away while the drill is in it, and both drifts sway a little all
+the time. The pockets and HEAT_MAX are sized so that full pressure can still hold the level.
 """
 from __future__ import annotations
 
+import math
+import random
+from dataclasses import dataclass, field
+
 from .config import (
-    COOLING_COUPLING, DEATH_TEXT_COLD, DEATH_TEXT_HOT, DEATH_TEXT_OXYGEN_HIGH, DEATH_TEXT_OXYGEN_LOW, HEAT,
-    HEAT_MAX, HEAT_PER_METRE, LIFE_PASS_OUT_TIME, LIFE_PRESSURE_RATE, LIFE_SAFE, LIFE_VALVE_TURNS, OXYGEN_COUPLING,
-    OXYGEN_USE,
+    COLD_SPOT_CHANCE, COOLING_COUPLING, DEATH_TEXT_COLD, DEATH_TEXT_HOT, DEATH_TEXT_OXYGEN_HIGH, DEATH_TEXT_OXYGEN_LOW,
+    GAS_POCKET_OXYGEN, GAS_POCKET_SPACING, GAS_POCKET_WIDTH, HEAT, HEAT_MAX, HEAT_PER_METRE, HEAT_WOBBLE,
+    HOT_SPOT_HEAT, HOT_SPOT_SPACING, HOT_SPOT_WIDTH, LIFE_PASS_OUT_TIME, LIFE_PRESSURE_RATE, LIFE_SAFE,
+    LIFE_VALVE_TURNS, OXYGEN_COUPLING, OXYGEN_USE, OXYGEN_WOBBLE, WOBBLE_RATE, WOBBLE_TIME,
 )
 from .dial import Dial
+from .head_bob import smooth
 from .interactable import Valve
+
+
+@dataclass
+class Pocket:
+    """A layer of rock `width` metres deep from `start` that pushes a level by up to `strength` / s."""
+    kind: str
+    start: float
+    width: float
+    strength: float
+    entered: bool = False
+
+    def drift(self, depth: float) -> float:
+        """Its push at `depth`: 0 outside, rising smoothly to `strength` in the middle and back."""
+        t = (depth - self.start) / self.width
+        return self.strength * math.sin(math.pi * t) ** 2 if 0.0 < t < 1.0 else 0.0
+
+
+class Pockets:
+    """The pockets of one kind ahead of the drill: a new one every `spacing` metres (random), `width` deep, each
+    with a strength from `strength`; with `flip_chance` it pushes the other way instead (and is a `flip_kind`)."""
+
+    def __init__(self, kind: str, spacing: tuple[float, float], width: tuple[float, float],
+                 strength: tuple[float, float], flip_kind: str = "", flip_chance: float = 0.0) -> None:
+        self.kind: str = kind
+        self.spacing: tuple[float, float] = spacing
+        self.width: tuple[float, float] = width
+        self.strength: tuple[float, float] = strength
+        self.flip_kind: str = flip_kind
+        self.flip_chance: float = flip_chance
+        self.pockets: list[Pocket] = []
+        self._next: float = random.uniform(*spacing)   # where the next one starts (m)
+
+    def drift(self, depth: float) -> float:
+        """The push at `depth` (level / s) of the pockets the drill is in."""
+        while self._next <= depth:
+            strength = random.uniform(*self.strength)
+            kind = self.kind
+            if random.random() < self.flip_chance:
+                strength, kind = -strength, self.flip_kind
+            self.pockets.append(Pocket(kind, self._next, random.uniform(*self.width), strength))
+            self._next += random.uniform(*self.spacing)
+        self.pockets = [p for p in self.pockets if p.start + p.width > depth]
+        for pocket in self.pockets:
+            if not pocket.entered and depth > pocket.start:
+                pocket.entered = True
+                print(f"LIFE: {pocket.kind} at {pocket.start:.0f} m ({pocket.width:.0f} m deep, "
+                      f"{pocket.strength:+.3f} / s)")
+        return sum(pocket.drift(depth) for pocket in self.pockets)
+
+    @property
+    def current(self) -> Pocket | None:
+        """The pocket the drill is in now (for the debug panel)."""
+        return next((p for p in self.pockets if p.entered), None)
+
+
+class Wobble:
+    """A slow random sway of up to +-`amount`: eases towards a new random offset every WOBBLE_TIME seconds."""
+
+    def __init__(self, amount: float) -> None:
+        self.amount: float = amount
+        self.value: float = 0.0
+        self._target: float = 0.0
+        self._until_next: float = 0.0
+
+    def update(self, dt: float) -> float:
+        self._until_next -= dt
+        if self._until_next <= 0.0:
+            self._until_next = random.uniform(*WOBBLE_TIME)
+            self._target = random.uniform(-self.amount, self.amount)
+        self.value += (self._target - self.value) * smooth(WOBBLE_RATE, dt)
+        return self.value
 
 
 class Regulator:
@@ -50,6 +131,8 @@ class Regulator:
         self.pressure: float = red
         self.leak: float = 0.0     # share of the pressure lost through a burst pipe
         self.strain: float = 0.0   # 0..1, 1 = passed out
+        self.drift: float = 0.0    # what pulled the level away last frame (level / s)
+        self.pocket: Pocket | None = None   # the pocket the drill is in (debug panel)
 
     @staticmethod
     def _opening(valve: Valve) -> float:
@@ -67,7 +150,8 @@ class Regulator:
         return "low" if self.level < low else "high" if self.level > high else None
 
     def update(self, dt: float, drift: float) -> None:
-        target = self._opening(self.pressure_valve) * (1.0 - self.leak)
+        self.drift = drift
+        target =self._opening(self.pressure_valve) * (1.0 - self.leak)
         self.pressure += (target - self.pressure) * min(LIFE_PRESSURE_RATE * dt, 1.0)
         push = self.coupling * self.pressure * (self.ideal - self.level)
         self.level = min(max(self.level + (push + drift) * dt, 0.0), 1.0)
@@ -82,14 +166,21 @@ class Regulator:
     def debug_lines(self) -> list[str]:
         danger = f", {self.out_of_range.upper()}" if self.out_of_range else ""
         danger += f", LEAKING {self.leak:.0%}" if self.leak else ""
+        pocket = f", in a {self.pocket.kind}" if self.pocket else ""
         return [f"{self.name}: pressure {self.pressure:.0%}, ideal {self.ideal:.0%}, level {self.level:.0%}{danger}, "
-                f"passing out {self.strain:.0%}"]
+                f"passing out {self.strain:.0%}",
+                f"  drift {self.drift:+.3f} / s{pocket}"]
 
 
 class LifeSupport:
     def __init__(self, oxygen: Regulator, cooling: Regulator) -> None:
         self.oxygen: Regulator = oxygen
         self.cooling: Regulator = cooling
+        self.hot_spots: Pockets = Pockets("hot spot", HOT_SPOT_SPACING, HOT_SPOT_WIDTH, HOT_SPOT_HEAT,
+                                          "cold spot", COLD_SPOT_CHANCE)
+        self.gas_pockets: Pockets = Pockets("gas pocket", GAS_POCKET_SPACING, GAS_POCKET_WIDTH, GAS_POCKET_OXYGEN)
+        self.heat_wobble: Wobble = Wobble(HEAT_WOBBLE)
+        self.oxygen_wobble: Wobble = Wobble(OXYGEN_WOBBLE)
 
     @staticmethod
     def heat(depth: float) -> float:
@@ -98,9 +189,13 @@ class LifeSupport:
         return min(HEAT + HEAT_PER_METRE * depth, HEAT_MAX)
 
     def update(self, dt: float, depth: float, engine_heat: float = 0.0) -> None:
-        """`engine_heat`: extra temperature / s from the engine (overclocked), on top of the HEAT_MAX cap."""
-        self.oxygen.update(dt, -OXYGEN_USE)
-        self.cooling.update(dt, self.heat(depth) + engine_heat)
+        """`engine_heat`: extra temperature / s from the engine (overclocked), on top of the HEAT_MAX cap. The
+        pockets and the wobble come on top too."""
+        self.oxygen.update(dt, -OXYGEN_USE + self.gas_pockets.drift(depth) + self.oxygen_wobble.update(dt))
+        self.cooling.update(dt, self.heat(depth) + engine_heat + self.hot_spots.drift(depth)
+                            + self.heat_wobble.update(dt))
+        self.oxygen.pocket = self.gas_pockets.current
+        self.cooling.pocket = self.hot_spots.current
 
     @property
     def strain(self) -> float:
