@@ -9,7 +9,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd ../Textures/tlak_kyslik.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Models/Textures/tlak_kyslik.png
 
 newmtl Material.009
 Ns 250.000000
@@ -19,7 +19,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 2
-map_Kd ../Textures/kyslík.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Models/Textures/kyslik.png
 
 newmtl Material.016
 Ns 250.000000
@@ -29,7 +29,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd ../Textures/teplota.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Models/Textures/teplota.png
 
 newmtl Material.017
 Ns 250.000000
@@ -39,4 +39,4 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd ../Textures/tlak_chlazeni.png
+map_Kd C:/Users/soutez/Desktop/HRAKOD/Models/Textures/tlak_chlazeni.png
