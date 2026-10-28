@@ -75,6 +75,8 @@ class MainMenu:
                 self.hovered = i
                 if pr.is_mouse_button_pressed(pr.MouseButton.MOUSE_BUTTON_LEFT):
                     return self.options[i]
+        if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
+            pr.toggle_fullscreen()
         return None
 
     def draw(self) -> None:

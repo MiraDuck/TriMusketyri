@@ -28,11 +28,11 @@ def world_bounds(model: pr.Model, pos: pr.Vector3) -> pr.BoundingBox:
 def load_geometry(path: str | Path) -> pr.Model:
     """Load an .obj without its materials (no mtllib / usemtl). Collision only needs the triangles, it skips loading
     textures, and raylib can hang forever on an .mtl with 10+ materials (DEVNOTES, Assets)."""
-    lines = Path(path).read_text().splitlines()
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     kept = [line for line in lines if not line.startswith(("mtllib", "usemtl"))]
     # raylib only loads models from a file path, so write the stripped copy to a temporary file
     fd, tmp = tempfile.mkstemp(suffix=".obj")
-    with os.fdopen(fd, "w") as f:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(kept))
     try:
         return pr.load_model(tmp)

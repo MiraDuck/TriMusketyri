@@ -28,11 +28,12 @@ def warn_big_mtl(model_path: str | Path) -> None:
     path = Path(model_path)
     if path.suffix.lower() != ".obj":
         return
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         if line.startswith("mtllib"):
             mtl = path.parent / line.split(maxsplit=1)[1].strip()
             if mtl.exists():
-                count = sum(1 for m in mtl.read_text().splitlines() if m.startswith("newmtl"))
+                count = sum(1 for m in mtl.read_text(encoding="utf-8", errors="replace").splitlines()
+                            if m.startswith("newmtl"))
                 if count >= MTL_HANG_RISK:
                     print(f"WARNING: {mtl.name} ({path.name}) has {count} materials; raylib may hang on "
                           f"{MTL_HANG_RISK}+. Remove the unused ones in Blender.", flush=True)
@@ -48,6 +49,34 @@ def rotation_about(pivot: pr.Vector3, axis: pr.Vector3, degrees: float) -> pr.Ma
         pr.matrix_multiply(pr.matrix_translate(-p.x, -p.y, -p.z), pr.matrix_rotate(axis, math.radians(degrees))),
         pr.matrix_translate(p.x, p.y, p.z),
     )
+
+
+def load_unicode_textures(model: pr.Model, model_path: str | Path) -> None:
+    """Load the .obj's textures whose file name isn't plain ASCII (Textures/kyslík.png) ourselves: raylib can't open
+    those on Windows ("Failed to open file") and leaves the material untextured. Python reads the file, raylib
+    decodes it from memory. raylib keeps the .mtl's materials in order, so the n-th newmtl is model.materials[n]."""
+    path = Path(model_path)
+    if path.suffix.lower() != ".obj":
+        return
+    mtl = next((path.parent / line.split(maxsplit=1)[1].strip()
+                for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+                if line.startswith("mtllib")), None)
+    if mtl is None or not mtl.exists():
+        return
+    index = -1
+    for line in mtl.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("newmtl"):
+            index += 1
+        elif line.startswith("map_Kd") and 0 <= index < model.materialCount:
+            texture_path = mtl.parent / line.split(maxsplit=1)[1].strip()
+            if texture_path.name.isascii() or not texture_path.exists():
+                continue
+            data = texture_path.read_bytes()
+            image = pr.load_image_from_memory(texture_path.suffix, data, len(data))
+            # unload_model frees it with the material
+            model.materials[index].maps[pr.MaterialMapIndex.MATERIAL_MAP_ALBEDO].texture = (
+                pr.load_texture_from_image(image))
+            pr.unload_image(image)
 
 
 def keep_rigged_meshes(model: pr.Model) -> None:
@@ -109,6 +138,7 @@ class Entity:
         self.collision_path: Path | None = Path(collision_path) if collision_path else None
         warn_big_mtl(model_path)
         self.model: pr.Model = pr.load_model(str(model_path))
+        load_unicode_textures(self.model, model_path)
         if self.model.skeleton.boneCount:
             keep_rigged_meshes(self.model)
         self.collider: MeshCollider | None = (

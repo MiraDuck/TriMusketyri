@@ -9,7 +9,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd Textures/wall.png
+map_Kd ../Textures/wall.png
 
 newmtl Material.002
 Ns 250.000000
@@ -19,7 +19,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd Textures/bloody_rust.png
+map_Kd ../Textures/bloody_rust.png
 
 newmtl Material.006
 Ns 250.000000
@@ -29,7 +29,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd Textures/screen.png
+map_Kd ../Textures/screen.png
 
 newmtl Material.019
 Ns 250.000000
@@ -39,4 +39,4 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Kd Textures/cudliky.png
+map_Kd ../Textures/cudliky.png

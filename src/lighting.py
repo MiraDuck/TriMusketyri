@@ -1,6 +1,7 @@
 """Lighting: dynamic cel-shaded point lights (Shaders/lit.vs + lit.fs) and the lamps they hang in.
 
-    lamp = Lamp("lamp_control_room", pr.Vector3(0, 4.16, 0))   # lamp model + its Light
+    lamp = Lamp("lamp_control_room", pr.Vector3(0, 4.16, 0), zone=(-4, 4))   # lamp model + its Light
+    lamp.light.on = False           # its car goes dark (LIGHT_DARK)
     lighting = Lighting([lamp.light])
     lighting.add(entity.model)      # this model is now lit
     lamp.update(pr.get_time())      # every frame: lamp glows while its light is on
@@ -8,23 +9,30 @@
 
 Only models passed to `add()` are lit; everything else draws with raylib's default (unlit) shader.
 `set_enabled(False)` puts the default shaders back.
+
+Each light only lights its `zone` (a z range: its car), since there are no shadows to stop it at the walls.
+A lamp's light also has `fill`: it lifts its whole car from LIGHT_DARK to LIGHT_AMBIENT while it is on.
 """
 from __future__ import annotations
 
 import pyray as pr
 
 from .config import (
-    LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE, LIGHT_AMBIENT, LIGHT_BANDS, SHADERS_DIR,
+    LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE, LIGHT_AMBIENT, LIGHT_BANDS, LIGHT_DARK,
+    SHADERS_DIR,
 )
 from .entity import Entity
 
 MAX_LIGHTS: int = 8   # keep in sync with MAX_LIGHTS in lit.fs
 LAMP_ON_TINT: pr.Color = pr.WHITE      # a shining lamp is drawn full bright, brighter than the lit room around it
-LAMP_OFF_TINT: pr.Color = pr.DARKGRAY
+_DARK = round(255 * LIGHT_DARK)
+LAMP_OFF_TINT: pr.Color = pr.Color(_DARK, _DARK, _DARK, 255)   # as dark as the unlit car around it
+EVERYWHERE: tuple[float, float] = (-1e9, 1e9)
 
 
 class Light:
-    """A point light. `blink` = blinks per second (0 = steady). Switch it with `on`."""
+    """A point light. `blink` = blinks per second (0 = steady). Switch it with `on`.
+    It only lights `zone` (z from .. to, its car), and adds `fill` to all of it while on (lamps)."""
 
     def __init__(
         self,
@@ -33,6 +41,8 @@ class Light:
         intensity: float = 1.0,
         range: float = 8.0,
         blink: float = 0.0,
+        zone: tuple[float, float] = EVERYWHERE,
+        fill: float = 0.0,
     ) -> None:
         self.pos: pr.Vector3 = pos
         # pyray's named colours (pr.RED) are tuples, pr.Color(...) is a struct: keep it as a tuple either way
@@ -42,6 +52,8 @@ class Light:
         self.intensity: float = intensity
         self.range: float = range
         self.blink: float = blink
+        self.zone: tuple[float, float] = zone
+        self.fill: float = fill
         self.on: bool = True
 
     def strength(self, time: float) -> float:
@@ -54,7 +66,8 @@ class Light:
 class Lamp(Entity):
     """A ceiling lamp: the lamp model hanging from `pos` with its Light inside the shade (`.light`).
     Don't add the lamp model to Lighting: it is the light source, so it is drawn unlit, full bright while its light
-    shines and dark while it is off (switched off, or the dark half of a blink). Not solid."""
+    shines and dark while it is off (switched off, or the dark half of a blink). Not solid.
+    `zone` is its car's z range: the light fills it (LIGHT_AMBIENT) and doesn't reach past it."""
 
     def __init__(
         self,
@@ -64,9 +77,11 @@ class Lamp(Entity):
         intensity: float = LAMP_INTENSITY,
         range: float = LAMP_RANGE,
         blink: float = 0.0,
+        zone: tuple[float, float] = EVERYWHERE,
     ) -> None:
         super().__init__(name, LAMP_MODEL, pos)
-        self.light: Light = Light(pr.Vector3(pos.x, pos.y - LAMP_LIGHT_DROP, pos.z), color, intensity, range, blink)
+        self.light: Light = Light(pr.Vector3(pos.x, pos.y - LAMP_LIGHT_DROP, pos.z), color, intensity, range, blink,
+                                  zone, fill=LIGHT_AMBIENT - LIGHT_DARK)
 
     def update(self, time: float) -> None:
         self.tint = LAMP_ON_TINT if self.light.strength(time) > 0 else LAMP_OFF_TINT
@@ -75,7 +90,8 @@ class Lamp(Entity):
         light = self.light
         return super().debug_lines() + [
             f"light: {'on' if light.on else 'off'}, colour {light.color}, intensity {light.intensity:g}, "
-            f"range {light.range:g}, blink {light.blink:g}/s"
+            f"range {light.range:g}, blink {light.blink:g}/s",
+            f"lights z {light.zone[0]:g} .. {light.zone[1]:g}, fill {light.fill:g}",
         ]
 
 
@@ -91,9 +107,10 @@ class Lighting:
         # where each uniform lives in the shader; for an array (lightPos[8]) it is the location of element 0
         self._loc: dict[str, int] = {
             name: pr.get_shader_location(self.shader, name)
-            for name in ("lightCount", "lightPos", "lightColor", "lightRange", "ambient", "bands")
+            for name in ("lightCount", "lightPos", "lightColor", "lightRange", "lightZone", "lightFill", "ambient",
+                         "bands")
         }
-        self._set_float("ambient", LIGHT_AMBIENT)
+        self._set_float("ambient", LIGHT_DARK)   # the lamps' fill brings their cars up to LIGHT_AMBIENT
         self._set_float("bands", LIGHT_BANDS)
         # each lit model with copies of its original shaders, to put back when disabled
         self._models: list[tuple[pr.Model, list[pr.Shader]]] = []
@@ -125,12 +142,14 @@ class Lighting:
         """Send the lights to the shader (positions, colours, blinking)."""
         if not self.enabled:
             return
-        positions, colors, ranges = [], [], []
+        positions, colors, ranges, zones, fills = [], [], [], [], []
         for light in self.lights:
-            s = light.strength(time) / 255.0
+            strength = light.strength(time)
             positions += [light.pos.x, light.pos.y, light.pos.z]
-            colors += [c * s for c in light.color[:3]]
+            colors += [c * strength / 255.0 for c in light.color[:3]]
             ranges.append(light.range)
+            zones += list(light.zone)
+            fills.append(light.fill if strength > 0 else 0.0)
         n = len(self.lights)
         vec3 = pr.ShaderUniformDataType.SHADER_UNIFORM_VEC3
         pr.set_shader_value(self.shader, self._loc["lightCount"], pr.ffi.new("int *", n),
@@ -138,8 +157,11 @@ class Lighting:
         if n:
             pr.set_shader_value_v(self.shader, self._loc["lightPos"], pr.ffi.new("float[]", positions), vec3, n)
             pr.set_shader_value_v(self.shader, self._loc["lightColor"], pr.ffi.new("float[]", colors), vec3, n)
-            pr.set_shader_value_v(self.shader, self._loc["lightRange"], pr.ffi.new("float[]", ranges),
-                                  pr.ShaderUniformDataType.SHADER_UNIFORM_FLOAT, n)
+            floats = pr.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+            pr.set_shader_value_v(self.shader, self._loc["lightRange"], pr.ffi.new("float[]", ranges), floats, n)
+            pr.set_shader_value_v(self.shader, self._loc["lightZone"], pr.ffi.new("float[]", zones),
+                                  pr.ShaderUniformDataType.SHADER_UNIFORM_VEC2, n)
+            pr.set_shader_value_v(self.shader, self._loc["lightFill"], pr.ffi.new("float[]", fills), floats, n)
 
     def unload(self) -> None:
         """Safe before or after the models are unloaded (raylib's unload_model leaves material shaders alone)."""

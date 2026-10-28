@@ -23,10 +23,12 @@ def draw_entity(entity: Entity, camera: pr.Camera3D, debug: DebugOptions, inspec
     collider = entity.collider
     show_mesh = debug.collision_meshes and collider is not None
     model = collider.model if show_mesh and collider else entity.model
-
-    pr.draw_model(model, entity.pos, 1.0, entity.tint)
+    if show_mesh and collider:
+        pr.draw_model(collider.model, entity.pos, 1.0, pr.DARKGRAY)
+    else:
+        pr.draw_model(entity.model, entity.pos, 1.0, entity.tint)
     if debug.wireframes:
-        pr.draw_model_wires(model, entity.pos, 1.0, pr.RED if show_mesh else pr.BLACK)
+        pr.draw_model_wires(model, entity.pos, 1.0, pr.WHITE if show_mesh else pr.BLACK)
     if debug.hitboxes:
         # solid things are always green; non-solid ones go red until you look at them
         ok = entity.solid or entity.is_targeted(camera)

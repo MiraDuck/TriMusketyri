@@ -53,11 +53,11 @@ CAR_LENGTH: float = 8.0
 ROOM_MODEL: Path = MODELS_DIR / "Room.obj"
 ROOM_COLLISION: Path = MODELS_DIR / "Room_Navmesh.obj"
 DRILL_CARS: list[tuple[str, Path, Path]] = [
-    ("control_room", MODELS_DIR / "Control_Room.obj", MODELS_DIR / "Control_Room_Navmesh.obj"),
-    ("rest_room", MODELS_DIR / "Rest_Room.obj", MODELS_DIR / "Rest_Room_Navmesh.obj"),
-    ("oxygen_room", MODELS_DIR / "Oxygen_Room.obj", MODELS_DIR / "Oxygen_Room_Navmesh.obj"),
-    ("storage_room", MODELS_DIR / "Storage_Room.obj", MODELS_DIR / "Storage_Room_Navmesh.obj"),
-    ("engine_room", MODELS_DIR / "Engine_Room.obj", MODELS_DIR / "Engine_Room_Navmesh.obj"),
+    ("control_room", MODELS_DIR / "Control_Rooms" / "Control_Room.obj", MODELS_DIR / "Control_Rooms" / "Control_Room_Navmesh.obj"),
+    ("rest_room", MODELS_DIR / "Rest_Rooms" / "Rest_Room.obj", MODELS_DIR / "Rest_Rooms" / "Rest_Room_Navmesh.obj"),
+    ("oxygen_room", MODELS_DIR / "Oxygen_Rooms" / "Oxygen_Room.obj", MODELS_DIR / "Oxygen_Rooms" / "Oxygen_Room_Navmesh.obj"),
+    ("storage_room", MODELS_DIR / "Storage_Rooms" / "Storage_Room.obj", MODELS_DIR / "Storage_Rooms" / "Storage_Room_Navmesh.obj"),
+    ("engine_room", MODELS_DIR / "Engine_Rooms" / "Engine_Room.obj", MODELS_DIR / "Engine_Rooms" / "Engine_Room_Navmesh.obj"),
 ]
 
 # ---------------- Models ----------------
@@ -65,41 +65,54 @@ LEVER_MODEL: Path = MODELS_DIR / "lever.obj"
 LEVER_POS: pr.Vector3 = pr.Vector3(0, 2, 0)
 VALVE_MODEL: Path = MODELS_DIR / "Valve.obj"
 VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
+# Decorations modelled in place in a car (same origin as the car), drawn and lit, not solid: (car, file).
+DECORATIONS: list[tuple[str, str]] = [
+    ("control_room", "Control_Rooms/Posters.obj"),   # oxygen and temperature posters on the front wall
+]
 # Moving parts: rigged .glb files modelled in place in a car (same origin as the car), so each is placed at the
 # position of the car it names (see DRILL_CARS). The entity's name is the file name in lower case (oxygen_level).
 # Dials (src/dial.py): (car, file, low, high, sweep in degrees). The modelled needle pose shows `low`.
 DIALS: list[tuple[str, str, float, float, float]] = [
-    ("control_room", "Temperature_Pressure.glb", 0.0, 100.0, 360.0),   # console, left
-    ("control_room", "Oxygen_Pressure.glb", 0.0, 100.0, 360.0),        # console, right
-    ("control_room", "Power_Dial.glb", 0.0, 100.0, 360.0),             # flat gauge on the console
-    ("oxygen_room", "Oxygen_Dial.glb", 0.0, 100.0, 360.0),
-    ("oxygen_room", "Temperature_Dial.glb", 0.0, 100.0, 360.0),
+    ("control_room", "Control_Rooms/Temperature_Pressure.glb", 0.0, 100.0, 360.0),   # console, left
+    ("control_room", "Control_Rooms/Oxygen_Pressure.glb", 0.0, 100.0, 360.0),        # console, right
+    ("control_room", "Control_Rooms/Power_Dial.glb", 0.0, 100.0, 360.0),             # flat gauge on the console
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Dial.glb", 0.0, 100.0, 360.0),
+    ("oxygen_room", "Oxygen_Rooms/Temperature_Dial.glb", 0.0, 100.0, 360.0),
 ]
 # Sliding dials, a marker moving left / right along a straight scale (its Move animation, along the bone's -X):
 # (car, file, low, high, distance it slides from low to high). Low and high are inside the red end blocks.
 SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
-    ("control_room", "Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
+    ("control_room", "Control_Rooms/Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
     ("control_room", "Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
 ]
 # Valves (src/interactable.py), grabbed and turned like VALVE_MODEL: (car, file).
 VALVES: list[tuple[str, str]] = [
-    ("oxygen_room", "Oxygen_Valve.glb"),
-    ("oxygen_room", "Temperature_Valve.glb"),
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Valve.glb"),
+    ("oxygen_room", "Oxygen_Rooms/Temperature_Valve.glb"),
 ]
 # Levers / switches / breakers (src/interactable.py): (car, file, degrees they swing when pulled down).
 SWITCHES: list[tuple[str, str, float]] = [
-    *[("control_room", f"Breaker_{i}.glb", 180.0) for i in range(1, 6)],   # back wall, flip from up to down
-    ("control_room", "Power_Lever.glb", -90.0),                            # console, twists a quarter turn
+    *[("control_room", f"Control_Rooms/Breaker_{i}.glb", 180.0) for i in range(1, 6)],   # back wall, flip from up to down
+    ("control_room", "Control_Rooms/Power_Lever.glb", -90.0),                            # console, twists a quarter turn
 ]
 LEVER_FLIP_TIME: float = 0.25   # seconds a lever / switch takes to swing over
 # Spinning parts (src/spinner.py): (car, file, degrees / s).
 SPINNERS: list[tuple[str, str, float]] = [
-    ("engine_room", "Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
+    ("engine_room", "Endine_Rooms/Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
 ]
+# Which car's lamp each breaker switches (up = on). The light changes as the handle passes halfway.
+BREAKER_LAMPS: dict[str, str] = {
+    "breaker_1": "engine_room",
+    "breaker_2": "storage_room",
+    "breaker_3": "oxygen_room",
+    "breaker_4": "rest_room",
+    "breaker_5": "control_room",
+}
 DIAL_NEEDLE_SPEED: float = 4.0   # how fast needles follow their value (higher = snappier, ~1/s to settle)
 
 # ---------------- Lighting (src/lighting.py) ----------------
-LIGHT_AMBIENT: float = 0.3   # brightness where no light reaches (0 = black)
+LIGHT_AMBIENT: float = 0.3   # brightness of a car with its lamp on, where the lamp doesn't reach (0 = black)
+LIGHT_DARK: float = 0.08     # brightness of a car with its lamp off (breaker down): barely visible
 LIGHT_BANDS: float = 5.0     # cel-shading steps per light (higher = smoother)
 # Every car gets a ceiling lamp (Light.obj, which hangs down from its origin) with a light inside it.
 LAMP_MODEL: Path = MODELS_DIR / "Light.obj"
@@ -109,7 +122,7 @@ LAMP_COLOR: pr.Color = pr.Color(230, 175, 48, 255)   # warm white
 LAMP_INTENSITY: float = 1.0
 LAMP_RANGE: float = 8.0
 # Extra lights: (position, colour, intensity, range, blinks per second; 0 = steady). At most 8 lights in total,
-# lamps included. Lights shine through walls, so keep the range inside the car.
+# lamps included. Like the lamps, a light only lights the car it is in.
 LIGHTS: list[tuple[pr.Vector3, pr.Color, float, float, float]] = [
     # (pr.Vector3(0, 4.0, -3), pr.RED, 1.0, 6.0, 1.0),   # e.g. a red alarm light in the control room
 ]

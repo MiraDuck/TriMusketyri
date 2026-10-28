@@ -22,6 +22,13 @@ from src.spinner import Spinner
 from src.vignette import Vignette
 
 
+def car_zone(z: float) -> tuple[float, float]:
+    """The z range of the car that z is in (cars are CAR_LENGTH long, centred on their position)."""
+    d, half = config.DRILL_POS, config.CAR_LENGTH / 2
+    i = round((d.z - z) / config.CAR_LENGTH)
+    return d.z - i * config.CAR_LENGTH - half, d.z - i * config.CAR_LENGTH + half
+
+
 def drill_cars() -> list[Entity]:
     """The cars from config.DRILL_CARS, the first at DRILL_POS and each next one CAR_LENGTH further along -z."""
     d = config.DRILL_POS
@@ -64,7 +71,10 @@ def main() -> None:
         audio.add_source(filename, pos, volume, near, far, floor)
 
     cars = drill_cars()
-    lamps = [Lamp(f"lamp_{car.name}", pr.vector3_add(car.pos, config.LAMP_OFFSET)) for car in cars]
+    # each light only lights its own car (no shadows to stop it at the walls)
+    lamps = [Lamp(f"lamp_{car.name}", pr.vector3_add(car.pos, config.LAMP_OFFSET), zone=car_zone(car.pos.z))
+             for car in cars]
+    car_lamp = {car.name: lamp for car, lamp in zip(cars, lamps)}
     # moving parts are modelled in place in their car, so they go at that car's position; named after the file
     car_pos = {car.name: car.pos for car in cars}
     models = config.MODELS_DIR
@@ -78,13 +88,17 @@ def main() -> None:
              for car, f, low, high, sweep in config.DIALS]
     dials += [Dial(Path(f).stem.lower(), models / f, car_pos[car], low, high, slide=distance)
               for car, f, low, high, distance in config.SLIDING_DIALS]
+    decorations = [Entity(Path(f).stem.lower(), models / f, car_pos[car]) for car, f in config.DECORATIONS]
     spinners = [Spinner(Path(f).stem.lower(), models / f, car_pos[car], speed) for car, f, speed in config.SPINNERS]
-    entities: list[Entity] = [*cars, *lamps, *interactables, *dials, *spinners]
+    entities: list[Entity] = [*cars, *lamps, *decorations, *interactables, *dials, *spinners]
     colliders = [e.collider for e in entities if e.collider is not None]
     held: Interactable | None = None   # what the player is holding (a valve), None = mouse look is on
+    switches = {i.name: i for i in interactables if isinstance(i, Lever)}
+    breaker_lamps = [(switches[breaker], car_lamp[car]) for breaker, car in config.BREAKER_LAMPS.items()]
 
-    lighting = Lighting([lamp.light for lamp in lamps] + [Light(*light) for light in config.LIGHTS])
-    for entity in [*cars, *interactables, *dials, *spinners]:   # not the lamps: they are the light, drawn unlit
+    lighting = Lighting([lamp.light for lamp in lamps] +
+                        [Light(*light, zone=car_zone(light[0].z)) for light in config.LIGHTS])
+    for entity in [*cars, *decorations, *interactables, *dials, *spinners]:   # not the lamps: they are the light, drawn unlit
         lighting.add(entity.model)
 
     vignette = Vignette()
@@ -118,6 +132,8 @@ def main() -> None:
             dial_test_at = pr.get_time() + 0.1
         for thing in [*interactables, *dials, *spinners]:
             thing.update(dt)
+        for breaker, lamp in breaker_lamps:   # up = on; it switches as the handle passes halfway
+            lamp.light.on = not breaker.thrown
 
         # ---- player ----
         if camera_mode == pr.CameraMode.CAMERA_FIRST_PERSON:

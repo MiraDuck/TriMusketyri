@@ -48,6 +48,13 @@ class Lever(Interactable):
         self.angle: float = 0.0
         self.pivot, self.axis = bone_pivot_axis(self.model) if throw else (None, None)
 
+    @property
+    def thrown(self) -> bool:
+        """True once the handle has swung past halfway down: what a switch acts on (`down` flips on the click)."""
+        if self.pivot is None:
+            return self.down
+        return abs(self.angle) > abs(self.throw) / 2
+
     def interact(self) -> None:
         self.down = not self.down
         print(f"{self.name}: {'down' if self.down else 'up'}")
