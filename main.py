@@ -89,7 +89,11 @@ def main() -> None:
              for car, f, low, high, sweep in config.DIALS]
     dials += [Dial(Path(f).stem.lower(), models / f, car_pos[car], low, high, slide=distance)
               for car, f, low, high, distance in config.SLIDING_DIALS]
-    decorations = [Entity(Path(f).stem.lower(), models / f, car_pos[car]) for car, f in config.DECORATIONS]
+    decorations = [Entity(Path(f).stem.lower(), models / f, car_pos[car],
+                          collision_path=models / solid if solid else None)
+                   for car, f, solid in config.DECORATIONS]
+    decorations += [Entity(Path(f).stem.lower(), models / f, pr.vector3_add(car_pos[car], offset))
+                    for car, f, offset in config.ITEMS]
     spinners = [Spinner(Path(f).stem.lower(), models / f, car_pos[car], speed) for car, f, speed in config.SPINNERS]
     entities: list[Entity] = [*cars, *lamps, *decorations, *interactables, *dials, *spinners]
     colliders = [e.collider for e in entities if e.collider is not None]

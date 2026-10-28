@@ -63,9 +63,15 @@ LEVER_MODEL: Path = MODELS_DIR / "lever.obj"
 LEVER_POS: pr.Vector3 = pr.Vector3(0, 2, 0)
 VALVE_MODEL: Path = MODELS_DIR / "Valve.obj"
 VALVE_POS: pr.Vector3 = pr.Vector3(0.6, 2, 0)
-# Decorations modelled in place in a car (same origin as the car), drawn and lit, not solid: (car, file).
-DECORATIONS: list[tuple[str, str]] = [
-    ("control_room", "Control_Rooms/Posters.obj"),   # oxygen and temperature posters on the front wall
+# Decorations modelled in place in a car (same origin as the car), drawn and lit: (car, file, solid). `solid` is
+# its collision model (the player is stopped by it), or None to walk through it.
+DECORATIONS: list[tuple[str, str, str | None]] = [
+    ("control_room", "Control_Rooms/Posters.obj", None),   # oxygen and temperature posters on the front wall
+    ("oxygen_room", "Oxygen_Rooms/Posters_Oxygen_Room.obj", None),   # labels on the tanks, valves and dials
+]
+# Items modelled at their own origin, placed at the car's position + offset; drawn and lit, not solid:
+# (car, file, offset).
+ITEMS: list[tuple[str, str, pr.Vector3]] = [
 ]
 # Moving parts: rigged .glb files modelled in place in a car (same origin as the car), so each is placed at the
 # position of the car it names (see DRILL_CARS). The entity's name is the file name in lower case (oxygen_level).
@@ -85,8 +91,10 @@ SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
 ]
 # Valves (src/interactable.py), grabbed and turned like VALVE_MODEL: (car, file).
 VALVES: list[tuple[str, str]] = [
-    ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),   # blue copy of Oxygen_Valve.glb, same place: one of them
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Valve.glb"),
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),   # TODO: exported at the same spot as Oxygen_Valve
     ("oxygen_room", "Oxygen_Rooms/Temperature_Valve.glb"),
+    ("oxygen_room", "Oxygen_Rooms/Temperature_Blue_Valve.glb"),   # on the pipe by the front door
     ("engine_room", "Engine_Rooms/Engine_Valve.glb"),        # back wall, by the door
 ]
 # Levers / switches / breakers (src/interactable.py): (car, file, degrees they swing when pulled down).
