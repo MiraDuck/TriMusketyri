@@ -17,6 +17,7 @@ import json
 import math
 import struct
 from pathlib import Path
+from typing import Callable
 
 import pyray as pr
 
@@ -145,6 +146,8 @@ class Entity:
     # moving parts set these: what they turn about (model space), shown in the debug panel
     pivot: pr.Vector3 | None = None
     axis: pr.Vector3 | None = None
+    # more debug panel lines from whatever this part belongs to (the engine adds its state to its parts)
+    debug_extra: Callable[[], list[str]] | None = None
 
     def __init__(
         self,
@@ -191,6 +194,11 @@ class Entity:
         )
 
     @property
+    def center(self) -> pr.Vector3:
+        """Middle of the hitbox, in the world (where its sounds come from)."""
+        return pr.vector3_lerp(self.bounds.min, self.bounds.max, 0.5)
+
+    @property
     def solid(self) -> bool:
         return self.collider is not None
 
@@ -215,6 +223,8 @@ class Entity:
         ]
         if self.pivot is not None and self.axis is not None:
             lines.append(f"pivot: {vec(pr.vector3_add(self.pos, self.pivot))}  axis: {vec(self.axis)}")
+        if self.debug_extra is not None:
+            lines += self.debug_extra()
         return lines
 
     def unload(self) -> None:

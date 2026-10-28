@@ -19,7 +19,7 @@ uniform vec3 lightPos[MAX_LIGHTS];
 uniform vec3 lightColor[MAX_LIGHTS];   // colour * intensity; 0 = off (or the dark half of a blink)
 uniform float lightRange[MAX_LIGHTS];
 uniform vec2 lightZone[MAX_LIGHTS];    // z range the light reaches (its car)
-uniform float lightFill[MAX_LIGHTS];   // added to the whole zone while the light is on (0 = none, e.g. alarms)
+uniform vec3 lightFill[MAX_LIGHTS];    // added to the whole zone while the light is on (0 = none; red in an alarm)
 uniform float ambient;                 // brightness where no light reaches: a car with its lamp off
 uniform float bands;                   // cel-shading steps
 
@@ -33,7 +33,7 @@ void main()
     for (int i = 0; i < lightCount; i++)
     {
         if (fragPosition.z < lightZone[i].x || fragPosition.z >= lightZone[i].y) continue;   // another car
-        light += vec3(lightFill[i]);
+        light += lightFill[i];
         vec3 toLight = lightPos[i] - fragPosition;
         float dist = length(toLight);
         float diffuse = max(dot(normal, toLight / dist), 0.0);

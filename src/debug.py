@@ -21,9 +21,10 @@ class DebugOptions:
     no_vignette: bool = False       # V:  turn the vignette off
 
 
-def looked_at(camera: pr.Camera3D, entities: Iterable[Entity], reach: float = DEBUG_REACH) -> Entity | None:
-    """The entity whose hitbox the view ray hits first, for the debug panel. The cars (solid) only count if nothing
-    else is hit: their boxes overlap the next car's and reach past the parts on their walls."""
+def looked_at(camera: pr.Camera3D, entities: Iterable[Entity], reach: float = DEBUG_REACH) -> list[Entity]:
+    """Every entity whose hitbox the view ray hits, nearest first, for the debug panel (boxes overlap: posters
+    cover the parts in front of them). The cars (solid) only count if nothing else is hit: their boxes overlap the
+    next car's and reach past the parts on their walls."""
     hits = [(d, e) for e in entities if (d := e.target_distance(camera, reach)) is not None]
     parts = [hit for hit in hits if not hit[1].solid]
-    return min(parts or hits, key=lambda hit: hit[0])[1] if hits else None
+    return [e for _, e in sorted(parts or hits, key=lambda hit: hit[0])]

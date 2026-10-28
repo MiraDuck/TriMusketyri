@@ -24,7 +24,7 @@ from .entity import Entity, bone_pivot_axis, bone_x, rotation_about
 
 class Dial(Entity):
     """`value` is clamped to low..high and shown as `sweep` degrees of needle travel (or `slide` units of marker
-    travel); the modelled pose is `low`. `shown` is where the needle actually is: it follows `value` with a short
+    travel); the modelled pose is `low`, unless `start` (degrees) turns the needle's `low` away from it. `shown` is where the needle actually is: it follows `value` with a short
     lag instead of jumping."""
 
     def __init__(self, name: str, model_path: str | Path, pos: pr.Vector3,
@@ -36,6 +36,7 @@ class Dial(Entity):
         self.low: float = low
         self.high: float = high
         self.sweep: float = sweep
+        self.start: float = 0.0
         self.slide: float = slide
         self.slide_dir: pr.Vector3 = pr.vector3_negate(bone_x(self.model))
         self.value: float = low
@@ -50,10 +51,10 @@ class Dial(Entity):
             d = pr.vector3_scale(self.slide_dir, fraction * self.slide)
             self.set_transform(pr.matrix_translate(d.x, d.y, d.z))
         else:
-            self.set_transform(rotation_about(self.pivot, self.axis, fraction * self.sweep))
+            self.set_transform(rotation_about(self.pivot, self.axis, self.start + fraction * self.sweep))
 
     def debug_lines(self) -> list[str]:
-        travel = f"slides {self.slide:g}" if self.slide else f"sweep {self.sweep:g} deg"
+        travel = f"slides {self.slide:g}" if self.slide else f"sweep {self.sweep:g} deg from {self.start:g}"
         return super().debug_lines() + [
             f"value: {self.value:.1f} (needle at {self.shown:.1f}), range {self.low:g}..{self.high:g}, {travel}"
         ]
