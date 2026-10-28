@@ -13,7 +13,7 @@ from __future__ import annotations
 import pyray as pr
 
 from .config import LEVER_FLIP_TIME, VALVE_FIX_TIME, VALVE_TURN_SPEED
-from .entity import Entity, bone_pivot_axis, rotation_about
+from .entity import Entity, bone_pivot_axis, bone_x, rotation_about
 
 
 class Interactable(Entity):
@@ -38,12 +38,12 @@ class Interactable(Entity):
 class Lever(Interactable):
     """Two states: up (False, as modelled) and down (True). Breakers and switches are levers too.
 
-    A rigged one (.glb) swings `throw` degrees about its bone's Y axis when pulled down (negative = the other way),
-    taking LEVER_FLIP_TIME; `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
+    A rigged one (.glb) swings `throw` degrees about its bone's Y axis (`bone_axis="x"`: its X axis) when pulled
+    down (negative = the other way), taking LEVER_FLIP_TIME; `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
     `flipped` is True for the one frame (after update) in which `down` changed, by a click or by a fault.
     """
 
-    def __init__(self, *args, throw: float = 0.0, **kwargs) -> None:
+    def __init__(self, *args, throw: float = 0.0, bone_axis: str = "y", **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.down: bool = False
         self.throw: float = throw
@@ -51,6 +51,8 @@ class Lever(Interactable):
         self.flipped: bool = False
         self._was_down: bool = False
         self.pivot, self.axis = bone_pivot_axis(self.model) if throw else (None, None)
+        if throw and bone_axis == "x":
+            self.axis = bone_x(self.model)
 
     @property
     def thrown(self) -> bool:

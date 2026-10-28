@@ -24,9 +24,11 @@ class HeadBob:
         self.fov_offset: float = 0.0   # eases to WALK_FOV_DELTA while walking
         self.lean_x: float = 0.0       # roll (radians) towards the strafe direction
         self.lean_y: float = 0.0       # pitch (radians): look slightly down walking forward, up walking back
+        self.stepped: bool = False     # a foot came down this frame (for the footstep sound)
 
     def update(self, moving: bool, sideway: float, forward: float, dt: float) -> None:
         # Every value eases towards its goal with x += (goal - x) * smooth(rate, dt); a higher rate is snappier.
+        step = math.floor(self.head_timer)
         if moving:
             self.head_timer += dt * 3.0   # 3 = steps per second (1.5 sway cycles)
             self.walk_lerp += (1.0 - self.walk_lerp) * smooth(10.0, dt)
@@ -36,6 +38,7 @@ class HeadBob:
             self.fov_offset += (0.0 - self.fov_offset) * smooth(5.0, dt)
         self.lean_x += (sideway * 0.02 - self.lean_x) * smooth(10.0, dt)    # 0.02 rad max roll
         self.lean_y += (forward * 0.015 - self.lean_y) * smooth(10.0, dt)   # 0.015 rad max pitch
+        self.stepped = math.floor(self.head_timer) != step   # one step per whole number of head_timer
 
     def apply(self, cam: pr.Camera3D) -> pr.Camera3D:
         """Return a copy of cam with the bob effects applied (y is left untouched)."""

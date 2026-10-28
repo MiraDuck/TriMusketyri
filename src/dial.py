@@ -24,8 +24,8 @@ from .entity import Entity, bone_pivot_axis, bone_x, rotation_about
 
 class Dial(Entity):
     """`value` is clamped to low..high and shown as `sweep` degrees of needle travel (or `slide` units of marker
-    travel); the modelled pose is `low`, unless `start` (degrees) turns the needle's `low` away from it. `shown` is where the needle actually is: it follows `value` with a short
-    lag instead of jumping."""
+    travel); the modelled pose is `low`, unless `start` (degrees) turns the needle's `low` away from it. `shown` is
+    where the needle actually is: it follows `value` with a short lag instead of jumping."""
 
     def __init__(self, name: str, model_path: str | Path, pos: pr.Vector3,
                  low: float = 0.0, high: float = 1.0, sweep: float = 270.0, slide: float = 0.0,

@@ -198,6 +198,10 @@ class Audio:
         if gain > 0.0:
             self.play_sound(name, self.sfx_volume * gain, pan=_pan(pos, listener))
 
+    def set_sound_volume(self, name: str, volume: float) -> None:
+        """Change a sound's volume (0..1 of the SFX volume), also while it plays."""
+        pr.set_sound_volume(self.sounds[name], self.sfx_volume * volume)
+
     def stop_sound(self, name: str) -> None:
         pr.stop_sound(self.sounds[name])
 

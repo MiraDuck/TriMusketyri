@@ -15,14 +15,15 @@ it can't keep up, and the deeper you go, the more pressure (or the colder the id
 HEAT_MAX (1800 m), which full cooling can always hold. The cooling is coupled 3x as
 strongly (COOLING_COUPLING), so it reacts faster and is easy to overdo: too cold is as deadly as too hot.
 
-The pressure itself follows its valve with a lag (LIFE_PRESSURE_RATE). The dials show the pressure and the level,
-0..100 (the level sliders' red ends are outside the safe levels).
+The pressure itself follows its valve with a lag (LIFE_PRESSURE_RATE), less `leak` (a burst pipe, pipes.py). The
+dials show the pressure and the level, 0..100 (the level sliders' red ends are outside the safe levels).
 """
 from __future__ import annotations
 
 from .config import (
     COOLING_COUPLING, DEATH_TEXT_COLD, DEATH_TEXT_HOT, DEATH_TEXT_OXYGEN_HIGH, DEATH_TEXT_OXYGEN_LOW, HEAT,
-    HEAT_MAX, HEAT_PER_METRE, LIFE_PASS_OUT_TIME, LIFE_PRESSURE_RATE, LIFE_SAFE, LIFE_VALVE_TURNS, OXYGEN_COUPLING, OXYGEN_USE,
+    HEAT_MAX, HEAT_PER_METRE, LIFE_PASS_OUT_TIME, LIFE_PRESSURE_RATE, LIFE_SAFE, LIFE_VALVE_TURNS, OXYGEN_COUPLING,
+    OXYGEN_USE,
 )
 from .dial import Dial
 from .interactable import Valve
@@ -47,6 +48,7 @@ class Regulator:
             valve.set_angle(valve.max_angle * opening)
             valve.debug_extra = self.debug_lines
         self.pressure: float = red
+        self.leak: float = 0.0     # share of the pressure lost through a burst pipe
         self.strain: float = 0.0   # 0..1, 1 = passed out
 
     @staticmethod
@@ -65,7 +67,8 @@ class Regulator:
         return "low" if self.level < low else "high" if self.level > high else None
 
     def update(self, dt: float, drift: float) -> None:
-        self.pressure += (self._opening(self.pressure_valve) - self.pressure) * min(LIFE_PRESSURE_RATE * dt, 1.0)
+        target = self._opening(self.pressure_valve) * (1.0 - self.leak)
+        self.pressure += (target - self.pressure) * min(LIFE_PRESSURE_RATE * dt, 1.0)
         push = self.coupling * self.pressure * (self.ideal - self.level)
         self.level = min(max(self.level + (push + drift) * dt, 0.0), 1.0)
         if self.out_of_range:
@@ -78,6 +81,7 @@ class Regulator:
 
     def debug_lines(self) -> list[str]:
         danger = f", {self.out_of_range.upper()}" if self.out_of_range else ""
+        danger += f", LEAKING {self.leak:.0%}" if self.leak else ""
         return [f"{self.name}: pressure {self.pressure:.0%}, ideal {self.ideal:.0%}, level {self.level:.0%}{danger}, "
                 f"passing out {self.strain:.0%}"]
 

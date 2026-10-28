@@ -19,8 +19,8 @@ from __future__ import annotations
 import pyray as pr
 
 from .config import (
-    ALARM_BLINK, ALARM_COLOR, ALARM_FILL_COLOR, LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP, LAMP_MODEL, LAMP_RANGE,
-    LIGHT_AMBIENT, LIGHT_BANDS, LIGHT_DARK, SHADERS_DIR,
+    ALARM_BLINK, ALARM_COLOR, ALARM_FILL_COLOR, FOG_COLOR, FOG_DENSITY, LAMP_COLOR, LAMP_INTENSITY, LAMP_LIGHT_DROP,
+    LAMP_MODEL, LAMP_RANGE, LIGHT_AMBIENT, LIGHT_BANDS, LIGHT_DARK, SHADERS_DIR,
 )
 from .entity import Entity
 
@@ -131,16 +131,27 @@ class Lighting:
         self._loc: dict[str, int] = {
             name: pr.get_shader_location(self.shader, name)
             for name in ("lightCount", "lightPos", "lightColor", "lightRange", "lightZone", "lightFill", "ambient",
-                         "bands")
+                         "bands", "viewPos", "fogColor", "fogDensity")
         }
         self._set_float("ambient", LIGHT_DARK)   # the lamps' fill brings their cars up to LIGHT_AMBIENT
         self._set_float("bands", LIGHT_BANDS)
+        self._set_float("fogDensity", FOG_DENSITY)
+        self._set_vec("fogColor", FOG_COLOR)
+        self.set_fog(pr.Vector3(0.0, 0.0, 0.0))
         # each lit model with copies of its original shaders, to put back when disabled
         self._models: list[tuple[pr.Model, list[pr.Shader]]] = []
 
     def _set_float(self, name: str, value: float) -> None:
         pr.set_shader_value(self.shader, self._loc[name], pr.ffi.new("float *", value),
                             pr.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+
+    def _set_vec(self, name: str, value: tuple[float, ...]) -> None:
+        kind = {2: pr.ShaderUniformDataType.SHADER_UNIFORM_VEC2, 3: pr.ShaderUniformDataType.SHADER_UNIFORM_VEC3}
+        pr.set_shader_value(self.shader, self._loc[name], pr.ffi.new("float[]", list(value)), kind[len(value)])
+
+    def set_fog(self, view_pos: pr.Vector3) -> None:
+        """Every frame: where the camera is (the fog grows with distance from it)."""
+        self._set_vec("viewPos", (view_pos.x, view_pos.y, view_pos.z))
 
     def _set_shaders(self, model: pr.Model, shaders: list[pr.Shader]) -> None:
         for i, shader in enumerate(shaders):

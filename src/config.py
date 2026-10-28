@@ -75,6 +75,8 @@ DECORATIONS: list[tuple[str, str, str | None]] = [
     ("control_room", "Control_Rooms/Posters.obj", None),   # oxygen and temperature posters on the front wall
     ("oxygen_room", "Oxygen_Rooms/Posters_Oxygen_Room.obj", None),   # labels on the tanks, valves and dials
     ("engine_room", "Engine_Rooms/Engine_Room_Posters.obj", None),   # "výkon motoru" on the back wall
+    ("rest_room", "Rest_Rooms/Miras_Duck.obj", None),
+    ("rest_room", "Rest_Rooms/Computer.obj", None),   # its screen and lever: src/computer.py
 ]
 # Items modelled at their own origin, placed at the car's position + offset; drawn and lit, not solid:
 # (car, file, offset).
@@ -172,6 +174,73 @@ DEPTH_PANEL_SIZE: tuple[int, int] = (248, 400)   # its texture, pixels (the pane
 SCREEN_GREEN: pr.Color = pr.Color(70, 190, 70, 255)   # the screens' green
 SCREEN_BLACK: pr.Color = pr.Color(28, 28, 30, 255)
 
+# ---------------- Pipes (src/pipes.py) ----------------
+# The oxygen and cooling pipes can burst: the more pressure their system has, the likelier. A burst pipe shoots
+# steam (particles), fills its car with smoke (over your eyes) and loses part of its system's pressure (turn the red valve up to make up
+# for it, and back down once it's fixed). Fix it: look at it, hold E until the ring is full, blink.
+# Both pipes run through every car, against its front wall left of the door (modelled in place, like the parts),
+# except the control room: there they would stand in the console, through its screens.
+PIPE_CARS: list[str] = ["rest_room", "oxygen_room", "storage_room", "engine_room"]
+# (car, system: "oxygen" / "cooling", model, burst model, where the steam comes out in car coordinates)
+PIPES: list[tuple[str, str, str, str, pr.Vector3]] = [
+    pipe
+    for car in PIPE_CARS
+    for pipe in (
+        (car, "oxygen", "Pipes/Pipe_Oxygen.obj", "Pipes/Pipe_Oxygen_Broken.obj", pr.Vector3(-0.27, 1.52, 3.66)),
+        (car, "cooling", "Pipes/Pipe_Temperature.obj", "Pipes/Pipe_Temperature_Broken.obj",
+         pr.Vector3(0.19, 1.52, 3.66)),
+    )
+]
+PIPE_CHECK_INTERVAL: tuple[float, float] = (8.0, 16.0)   # seconds between a pipe's burst rolls
+PIPE_BURST_CHANCE: float = 0.05    # per pipe and roll at full pressure; * pressure^2 (half pressure: 1/4 of it)
+PIPE_LEAK: float = 0.5             # share of its system's pressure a burst pipe loses (two: 75 %, ...)
+PIPE_REPAIR_TIME: float = 3.0      # seconds holding E
+PIPE_REPAIR_REACH: float = 2.5     # how close you have to be
+PIPE_LEAK_SOUND: str = "pipe-leak.wav"         # loops at the crack while it is burst
+PIPE_REPAIR_SOUND: str = "repair-generic.wav"  # when it is fixed
+BLINK_TIME: tuple[float, float, float] = (0.12, 0.15, 0.3)   # eyes closing, closed (it gets fixed), opening
+# Steam: particles shot out of the crack, mostly straight into the room (-z, away from the wall)
+STEAM_RATE: float = 200.0          # particles / s
+STEAM_LIFE: float = 1.4            # seconds each one lives
+STEAM_SPEED: tuple[float, float] = (2.0, 4.0)   # units / s it shoots out at
+STEAM_SPREAD: float = 0.7          # sideways / up-down speed, of the forward speed
+STEAM_SIZE: tuple[float, float] = (0.15, 0.9)   # size when it comes out, when it fades
+STEAM_COLOR: pr.Color = pr.Color(110, 110, 115, 255)   # dark smoke
+
+# ---------------- Fog (lit.fs) ----------------
+FOG_COLOR: tuple[float, float, float] = (0.05, 0.05, 0.06)   # a little everywhere: far things fade into the dark
+FOG_DENSITY: float = 0.05          # 1 - exp(-density * distance): ~33 % at 8 m (the next car)
+# Smoke: while you are in a car with a burst pipe, it covers the whole screen, HUD included (pipes.draw_smoke)
+SMOKE_COLOR: pr.Color = pr.Color(28, 28, 30, 255)
+SMOKE_MAX: float = 0.75            # how much it covers once the car has filled up (0..1)
+SMOKE_RISE: float = 0.3            # how fast the car fills (of the max / s: full in ~3 s)
+SMOKE_CLEAR: float = 0.05          # how fast it clears once fixed (of the max / s: 20 s)
+
+# ---------------- Player sounds ----------------
+STEP_SOUND: str = "walk.wav"       # one footstep, played on every step of the head bob (on the ground)
+STEP_VOLUME: float = 0.5
+BREATH_SOUND: str = "breath.wav"   # repeats, louder and louder, while you are about to pass out
+BREATH_FROM: float = 0.3           # starts at this much strain (0..1, life support), full volume at 1
+BREATH_VOLUME: tuple[float, float] = (4.0, 12.0)   # when it starts, at full strain (the file is very quiet: its
+                                                    # loudest is ~5 % of full scale, so > 1 amplifies it)
+
+# ---------------- Computer (src/computer.py) ----------------
+# The rest room's computer collects the drill's status ("Sbírání dat...", data_1) for COMPUTER_COOLDOWN, then shows
+# "Data připravena" (data_2): pull its lever to send the status (depth, engine, oxygen, temperature) and it starts
+# collecting again.
+COMPUTER_CAR: str = "rest_room"
+COMPUTER_LEVER: str = "Rest_Rooms/Computer_Lever.glb"   # sticks out of a slot on its side
+COMPUTER_LEVER_THROW: float = 60.0     # degrees it swings down (about its bone's X axis), then back
+# A quad just in front of its screen (car coordinates): top left, top right, bottom right, bottom left as you see it
+COMPUTER_SCREEN_CORNERS: tuple[pr.Vector3, ...] = (
+    pr.Vector3(-0.144, 1.704, -3.025), pr.Vector3(0.358, 1.704, -3.025),
+    pr.Vector3(0.358, 1.357, -3.025), pr.Vector3(-0.144, 1.357, -3.025))
+COMPUTER_SCREENS: tuple[Path, Path] = (MODELS_DIR / "Textures" / "data_1.png",   # collecting
+                                       MODELS_DIR / "Textures" / "data_2.png")   # ready to send
+COMPUTER_SCREEN_WIDTH: int = 1024      # the pictures are 3508 px wide: scaled down when loaded
+COMPUTER_COOLDOWN: float = 60.0        # seconds it collects before the data is ready again
+COMPUTER_SEND_SOUND: str = "morse-premade-message-nomeaning.mp3"   # from the computer when it sends
+
 # ---------------- Alarm (src/alarm.py) ----------------
 # While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
 ALARM_COLOR: pr.Color = pr.Color(255, 30, 20, 255)
@@ -211,7 +280,7 @@ DEATH_FONTS: list[Path] = [ROOT / "Fonts" / "death.ttf", Path("C:/Windows/Fonts/
 LIFE_VALVE_TURNS: float = 1.0          # turns from closed to fully open
 LIFE_PRESSURE_RATE: float = 0.5        # how fast the pressure follows its valve (of the gap per s)
 LIFE_SAFE: tuple[float, float] = (0.25, 0.75)   # levels (0..1) you can live in; the sliders' red ends are outside
-LIFE_PASS_OUT_TIME: float = 10.0       # seconds outside the safe levels until you pass out (recovers at half that rate)
+LIFE_PASS_OUT_TIME: float = 20.0       # seconds outside the safe levels until you pass out (recovers at half that rate)
 # (red valve, blue valve, the dials that show the pressure, the dials that show the level)
 OXYGEN_PARTS: tuple[str, str, tuple[str, ...], tuple[str, ...]] = (
     "oxygen_valve", "oxygen_blue_valve", ("oxygen_pressure",), ("oxygen_level", "oxygen_dial"))
@@ -232,9 +301,9 @@ COOLING_START: tuple[float, float, float] = (0.5, 0.55, 0.5)
 # Each kind of fault: every <interval> seconds (a random time in that range) it has a <chance> to happen.
 LIGHT_FAULT_INTERVAL: tuple[float, float] = (60.0, 120.0)   # a random breaker flips (always)
 FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)           # a random valve starts drifting,
-FAULT_CHANCE: float = 0.25                                  # with this chance (so about every 40 s)
+FAULT_CHANCE: float = 0.4                                   # with this chance (so about every 25 s)
 VALVE_DRIFT_RATE: float = 0.02   # how fast a drifting valve creeps: of its whole range per s (2 % / s), either way
-VALVE_DRIFT_AMOUNT: float = 0.1  # how far it creeps before it stops by itself: of its range (10 %, in ~5 s)
+VALVE_DRIFT_AMOUNT: float = 0.15  # how far it creeps before it stops by itself: of its range (15 %, in ~7 s)
 
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness of a car with its lamp on, where the lamp doesn't reach (0 = black)

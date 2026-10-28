@@ -1,7 +1,7 @@
 """Drawing: the 3D scene and the HUD."""
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 
 import pyray as pr
 
@@ -10,7 +10,6 @@ from .debug import DebugOptions
 from .entity import Entity
 from .lighting import Light
 from .player import Player
-from .screens import Screens
 
 MODE_NAMES: dict[int, str] = {
     pr.CameraMode.CAMERA_FREE: "FREE",
@@ -44,18 +43,18 @@ def draw_scene(
     lights: Iterable[Light],
     debug: DebugOptions,
     inspected: list[Entity] | None = None,
-    screens: Screens | None = None,
+    overlays: Iterable[Callable[[], None]] = (),
 ) -> None:
     """view_camera (with head bob) is what we render from; camera is the player's real camera, used for targeting.
     With hitboxes on, also the player box and each light as a small sphere in its colour; `inspected` (what you
-    look at) get a yellow box. `screens` (the console's displays) are drawn after the entities."""
+    look at) get a yellow box. `overlays` (the console's screens, the steam) are drawn after the entities, in the same 3D mode."""
     pr.begin_mode_3d(view_camera)
 
     pr.draw_plane(pr.Vector3(0.0, 0.0, 0.0), pr.Vector2(32.0, 32.0), pr.LIGHTGRAY)
     for entity in entities:
         draw_entity(entity, camera, debug, entity in (inspected or ()))
-    if screens is not None:
-        screens.draw()
+    for overlay in overlays:
+        overlay()
 
     if debug.hitboxes:
         for light in lights:

@@ -3,6 +3,7 @@
 // Cel-shaded point lights (from shader_test.py). Each light fades to nothing at its range.
 // No shadows, so each light only lights its own car: the z range in lightZone (z from .x up to .y).
 // A lamp also brightens its whole car by lightFill, so a car whose lamp is off drops to `ambient` (dark).
+// Fog: everything fades into fogColor with distance from the camera.
 
 #define MAX_LIGHTS 8   // keep in sync with lighting.MAX_LIGHTS
 
@@ -22,6 +23,9 @@ uniform vec2 lightZone[MAX_LIGHTS];    // z range the light reaches (its car)
 uniform vec3 lightFill[MAX_LIGHTS];    // added to the whole zone while the light is on (0 = none; red in an alarm)
 uniform float ambient;                 // brightness where no light reaches: a car with its lamp off
 uniform float bands;                   // cel-shading steps
+uniform vec3 viewPos;                  // the camera
+uniform vec3 fogColor;
+uniform float fogDensity;
 
 out vec4 finalColor;
 
@@ -44,5 +48,9 @@ void main()
     }
 
     vec4 base = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
-    finalColor = vec4(base.rgb * light, base.a);
+    vec3 color = base.rgb * light;
+
+    float dist = length(fragPosition - viewPos);
+    color = mix(color, fogColor, 1.0 - exp(-fogDensity * dist));
+    finalColor = vec4(color, base.a);
 }

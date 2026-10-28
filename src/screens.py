@@ -22,7 +22,7 @@ from .config import (
 )
 
 
-def _quad(corners: list[pr.Vector3], texture_id: int, uvs: tuple[tuple[float, float], ...],
+def draw_quad(corners: list[pr.Vector3], texture_id: int, uvs: tuple[tuple[float, float], ...],
           color: pr.Color = pr.WHITE) -> None:
     """corners: top left, top right, bottom right, bottom left; uvs the same corners' texture coordinates."""
     pr.rl_disable_backface_culling()
@@ -83,11 +83,11 @@ class Screens:
     def draw(self) -> None:
         if not self.on:
             for corners in (self.drill_corners, self.panel_corners):
-                _quad(corners, 0, ((0, 0),) * 4, pr.BLACK)
+                draw_quad(corners, 0, ((0, 0),) * 4, pr.BLACK)
             return
-        _quad(self.drill_corners, self.frames[int(self.frame)].id, self._drill_uvs)
+        draw_quad(self.drill_corners, self.frames[int(self.frame)].id, self._drill_uvs)
         # a render texture is stored upside down
-        _quad(self.panel_corners, self.panel.texture.id, ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)))
+        draw_quad(self.panel_corners, self.panel.texture.id, ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)))
 
     def unload(self) -> None:
         for texture in self.frames:
