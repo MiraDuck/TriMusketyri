@@ -4,6 +4,8 @@ centrum obnovení rudných energií
 A first-person horror game on a drill digging down. Keep the engine running, the oxygen and the temperature in
 range, and fix what breaks.
 
+**WARNING**: it can break on paths that have czech characters
+
 ## Run
 Needs Python 3.12+ and raylib for Python.
 ```
