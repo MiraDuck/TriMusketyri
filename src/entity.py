@@ -3,6 +3,9 @@
     room = Entity("room", "Models/Room.obj", Vector3(0, 1, 0), collision_path="Models/Room_Navmesh.obj")
     lever = Entity("lever", "Models/lever.obj", Vector3(0, 2, 0))     # no collision mesh: not solid
 
+Moving parts (dials, valves, switches, the engine) are rigged .glb files, modelled in place in their car (same
+origin as the car) with one bone: the part turns about the bone's Y axis through its head (`bone_pivot_axis`).
+
 Hitbox:
   - `bounds` is always there (world-space box, used for debug drawing and for "am I looking at it").
   - `collider` is optional. If given, the player is stopped by it (solid). Without it the entity is
@@ -47,8 +50,50 @@ def rotation_about(pivot: pr.Vector3, axis: pr.Vector3, degrees: float) -> pr.Ma
     )
 
 
+def keep_rigged_meshes(model: pr.Model) -> None:
+    """Drop the meshes no bone moves, so a rigged .glb is only its moving part (Engine_Spin.glb also holds an old
+    copy of the engine room). Unloads them and shifts the rest down; unload_model then frees only what is left."""
+    keep = [i for i in range(model.meshCount) if model.meshes[i].boneIndices != pr.ffi.NULL]
+    if not keep or len(keep) == model.meshCount:
+        return
+    for i in range(model.meshCount):
+        if i not in keep:
+            pr.unload_mesh(model.meshes[i])
+    for k, i in enumerate(keep):   # k <= i, so nothing is overwritten before it is moved
+        model.meshes[k] = model.meshes[i]
+        model.meshMaterial[k] = model.meshMaterial[i]
+    model.meshCount = len(keep)
+
+
+def _bone(model: pr.Model) -> pr.Transform:
+    if model.skeleton.boneCount < 1:
+        raise ValueError("the model has no bone to move it by (export it rigged, as .glb)")
+    return model.skeleton.bindPose[0]   # where the bone sits in Blender
+
+
+def bone_pivot_axis(model: pr.Model) -> tuple[pr.Vector3, pr.Vector3]:
+    """Head and Y axis (model space) of a rigged model's first bone: what its moving part turns about."""
+    bone = _bone(model)
+    pivot = pr.Vector3(bone.translation.x, bone.translation.y, bone.translation.z)
+    return pivot, pr.vector3_rotate_by_quaternion(pr.Vector3(0.0, 1.0, 0.0), bone.rotation)
+
+
+def bone_x(model: pr.Model) -> pr.Vector3:
+    """X axis (model space) of a rigged model's first bone: the `Move` animations slide along -X."""
+    return pr.vector3_rotate_by_quaternion(pr.Vector3(1.0, 0.0, 0.0), _bone(model).rotation)
+
+
+def vec(v: pr.Vector3) -> str:
+    """A Vector3 for the debug panel."""
+    return f"({v.x:.2f}, {v.y:.2f}, {v.z:.2f})"
+
+
 class Entity:
     """Needs an open window (load_model needs a GL context)."""
+
+    # moving parts set these: what they turn about (model space), shown in the debug panel
+    pivot: pr.Vector3 | None = None
+    axis: pr.Vector3 | None = None
 
     def __init__(
         self,
@@ -60,8 +105,12 @@ class Entity:
         self.name: str = name
         self.pos: pr.Vector3 = pos
         self.tint: pr.Color = pr.WHITE   # colour the model is drawn with (multiplies its texture)
+        self.model_path: Path = Path(model_path)
+        self.collision_path: Path | None = Path(collision_path) if collision_path else None
         warn_big_mtl(model_path)
         self.model: pr.Model = pr.load_model(str(model_path))
+        if self.model.skeleton.boneCount:
+            keep_rigged_meshes(self.model)
         self.collider: MeshCollider | None = (
             MeshCollider(collision_path, pos) if collision_path else None
         )
@@ -69,16 +118,51 @@ class Entity:
         self.bounds: pr.BoundingBox = (
             self.collider.bounds if self.collider else world_bounds(self.model, pos)
         )
+        self._model_box: pr.BoundingBox = pr.get_model_bounding_box(self.model)   # as modelled, model space
+
+    def set_transform(self, transform: pr.Matrix) -> None:
+        """Move / turn the model (moving parts) and its hitbox with it, so you click it where you see it.
+        The box is the one around the modelled box's 8 corners after the transform (raylib's own
+        get_model_bounding_box only transforms min and max, which is wrong once it turns)."""
+        self.model.transform = transform
+        if self.collider is not None:
+            return
+        lo, hi = self._model_box.min, self._model_box.max
+        corners = [pr.vector3_transform(pr.Vector3(x, y, z), transform)
+                   for x in (lo.x, hi.x) for y in (lo.y, hi.y) for z in (lo.z, hi.z)]
+        xs, ys, zs = [c.x for c in corners], [c.y for c in corners], [c.z for c in corners]
+        p = self.pos
+        self.bounds = pr.BoundingBox(
+            pr.Vector3(min(xs) + p.x, min(ys) + p.y, min(zs) + p.z),
+            pr.Vector3(max(xs) + p.x, max(ys) + p.y, max(zs) + p.z),
+        )
 
     @property
     def solid(self) -> bool:
         return self.collider is not None
 
-    def is_targeted(self, camera: pr.Camera3D, reach: float = 2.5) -> bool:
-        """True if the camera is looking at the hitbox from within `reach`."""
+    def target_distance(self, camera: pr.Camera3D, reach: float = 2.5) -> float | None:
+        """How far the camera's view ray hits the hitbox, or None if it misses or is further than `reach`."""
         direction = pr.vector3_normalize(pr.vector3_subtract(camera.target, camera.position))
         hit = pr.get_ray_collision_box(pr.Ray(camera.position, direction), self.bounds)
-        return bool(hit.hit and hit.distance <= reach)
+        return hit.distance if hit.hit and hit.distance <= reach else None
+
+    def is_targeted(self, camera: pr.Camera3D, reach: float = 2.5) -> bool:
+        """True if the camera is looking at the hitbox from within `reach`."""
+        return self.target_distance(camera, reach) is not None
+
+    def debug_lines(self) -> list[str]:
+        """What the debug panel shows while you look at this with hitboxes on (F1). Subclasses add their state."""
+        b = self.bounds
+        lines = [
+            f"{self.name} ({type(self).__name__})",
+            f"model: {self.model_path.name}" + (f", solid: {self.collision_path.name}" if self.collision_path else ""),
+            f"pos: {vec(self.pos)}",
+            f"box: {vec(b.min)} .. {vec(b.max)}",
+        ]
+        if self.pivot is not None and self.axis is not None:
+            lines.append(f"pivot: {vec(pr.vector3_add(self.pos, self.pivot))}  axis: {vec(self.axis)}")
+        return lines
 
     def unload(self) -> None:
         pr.unload_model(self.model)
