@@ -7,7 +7,7 @@
 - `speed` (0..1) is how fast the motor really turns. It follows the power slowly (ENGINE_SPIN_UP / _DOWN: a heavy
   flywheel), so turning the valve down doesn't kill it straight away. The engine model spins at
   ENGINE_MAX_SPIN * speed, the engine sound's volume and pitch follow it, and the power dial on the console shows it
-  (its red sector is 0..30 %: ENGINE_DIAL_RED).
+  (its red sector is 0..30 %, the rest of the face 30..100 %: ENGINE_DIAL_RED).
 - It runs at ENGINE_MIN_POWER (30 %) .. 100 %. When its speed drops below that it DIES and coasts down
   (ENGINE_COAST_RATE; `failing`: the main loop sounds the alarm). Press the power button in the control room while
   it still spins to restart it: that also turns the valve up to at least ENGINE_RESTART_POWER (40 %), so it
@@ -46,10 +46,9 @@ class Engine:
         self.sound: SoundSource | None = sound
         valve.max_angle = 360.0 * ENGINE_VALVE_TURNS
         valve.set_angle(valve.max_angle * ENGINE_START_POWER)
-        if dial is not None:   # its red sector = 0 .. ENGINE_MIN_POWER, so 100 % is just past the top
-            red_from, red_to = ENGINE_DIAL_RED
-            dial.start = red_from
-            dial.sweep = (red_to - red_from) / ENGINE_MIN_POWER
+        if dial is not None:   # a full turn from the red sector's first edge: see _dial_value
+            dial.start = ENGINE_DIAL_RED[0]
+            dial.sweep = 360.0
         self.state: EngineState = EngineState.RUNNING
         self.speed: float = ENGINE_START_POWER
         self._valve_target: float | None = None   # the angle a restart is turning the valve up to
@@ -108,11 +107,20 @@ class Engine:
 
         self.spinner.speed = ENGINE_MAX_SPIN * self.speed
         if self.dial is not None:
-            self.dial.value = self.dial.low + (self.dial.high - self.dial.low) * self.speed
+            self.dial.value = self.dial.low + (self.dial.high - self.dial.low) * self._dial_fraction()
         if self.sound is not None:
             self.sound.volume = ENGINE_SOUND_VOLUME * self.speed
             low, high = ENGINE_SOUND_PITCH
             self.sound.pitch = low + (high - low) * self.speed
+
+    def _dial_fraction(self) -> float:
+        """How far round the power dial's face (0..1 of a turn from the red sector's first edge) the speed is:
+        0..ENGINE_MIN_POWER fills the red sector, the rest of the speed the rest of the face."""
+        red_from, red_to = ENGINE_DIAL_RED
+        red = (red_to - red_from) / 360.0
+        if self.speed < ENGINE_MIN_POWER:
+            return red * self.speed / ENGINE_MIN_POWER
+        return red + (1.0 - red) * (self.speed - ENGINE_MIN_POWER) / (1.0 - ENGINE_MIN_POWER)
 
     def debug_lines(self) -> list[str]:
         return [f"engine: {self.state.value}, power {self.power:.0%}, speed {self.speed:.0%}"]
