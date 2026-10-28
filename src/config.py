@@ -135,7 +135,8 @@ ENGINE_BUTTON: str = "power_button"
 ENGINE_SPINNER: str = "engine_spin"
 ENGINE_DIAL: str = "power_dial"          # shows how fast it turns
 # Needle angles (clockwise from its modelled pose, straight up) at the edges of the red sector on the power dial's
-# face: 0 % sits at the first, ENGINE_MIN_POWER (30 %) at the second, so the needle is in the red while it dies.
+# face: 0 % sits at the first, ENGINE_MIN_POWER (30 %) at the second, so the needle is in the red while it dies;
+# 30..100 % takes the rest of the face, all the way round to the first edge again.
 ENGINE_DIAL_RED: tuple[float, float] = (145.0, 215.0)
 ENGINE_SOUND: str = "engine"             # the SOUND_SOURCES entry (file name without extension)
 ENGINE_VALVE_TURNS: float = 2.0
