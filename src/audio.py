@@ -172,6 +172,14 @@ class Audio:
         self.sounds[key] = pr.load_sound(str(path))
         return key
 
+    def add_sound(self, name: str, sound: pr.Sound) -> str:
+        """Keep a sound made in code (load_sound_from_wave) under `name`, replacing (and freeing) one already there."""
+        if name in self.sounds:
+            pr.stop_sound(self.sounds[name])
+            pr.unload_sound(self.sounds[name])
+        self.sounds[name] = sound
+        return name
+
     def load_all_sounds(self) -> list[str]:
         """Load every audio file in SFX/. Returns the list of names."""
         for path in sorted(self.sfx_dir.iterdir()):

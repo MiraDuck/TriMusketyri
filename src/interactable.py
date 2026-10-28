@@ -39,14 +39,16 @@ class Lever(Interactable):
     """Two states: up (False, as modelled) and down (True). Breakers and switches are levers too.
 
     A rigged one (.glb) swings `throw` degrees about its bone's Y axis (`bone_axis="x"`: its X axis) when pulled
-    down (negative = the other way), taking LEVER_FLIP_TIME; `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
+    down (negative = the other way), taking `flip_time` (LEVER_FLIP_TIME); `angle` is where it is on the way. Without a bone (lever.obj) it doesn't move.
     `flipped` is True for the one frame (after update) in which `down` changed, by a click or by a fault.
     """
 
-    def __init__(self, *args, throw: float = 0.0, bone_axis: str = "y", **kwargs) -> None:
+    def __init__(self, *args, throw: float = 0.0, bone_axis: str = "y", flip_time: float = LEVER_FLIP_TIME,
+                 **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.down: bool = False
         self.throw: float = throw
+        self.flip_time: float = flip_time
         self.angle: float = 0.0
         self.flipped: bool = False
         self._was_down: bool = False
@@ -75,7 +77,7 @@ class Lever(Interactable):
         if self.pivot is None:
             return
         target = self.throw if self.down else 0.0
-        step = abs(self.throw) / LEVER_FLIP_TIME * dt
+        step = abs(self.throw) / self.flip_time * dt
         self.angle = min(self.angle + step, target) if self.angle < target else max(self.angle - step, target)
         self.set_transform(rotation_about(self.pivot, self.axis, self.angle))
 

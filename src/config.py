@@ -28,7 +28,10 @@ SOUND_SOURCES: list[tuple[str, pr.Vector3, float, float, float, float]] = [
 # Short sounds (files in SFX/) played from where a part is when it moves; heard fully within SFX_NEAR, gone by
 # SFX_FAR (a breaker flipping in the control room is still loud in the next car, nearly gone two cars away).
 SWITCH_SOUND: str = "lever-push-pull.wav"                       # breakers and other switches
-SWITCH_SOUNDS: dict[str, str] = {"power_button": "button-press.wav"}   # switches with their own sound
+SWITCH_SOUNDS: dict[str, str] = {   # switches with their own sound
+    "power_button": "button-press.wav",
+    "engine_hatch": "furnace-Animnation.wav",   # the furnace hatch swinging open / shut (src/fuel.py)
+}
 VALVE_SOUND: str = "valve-turn.wav"                             # repeats while a valve turns
 SFX_NEAR: float = 3.0
 SFX_FAR: float = 14.0
@@ -77,6 +80,8 @@ DECORATIONS: list[tuple[str, str, str | None]] = [
     ("engine_room", "Engine_Rooms/Engine_Room_Posters.obj", None),   # "výkon motoru" on the back wall
     ("rest_room", "Rest_Rooms/Miras_Duck.obj", None),
     ("rest_room", "Rest_Rooms/Computer.obj", None),   # its screen and lever: src/computer.py
+    ("rest_room", "Rest_Rooms/Paper_Stack.obj", None),   # a poem and a sudoku book on the table
+    ("rest_room", "Rest_Rooms/Radio.obj", None),
 ]
 # Items modelled at their own origin, placed at the car's position + offset; drawn and lit, not solid:
 # (car, file, offset).
@@ -100,6 +105,8 @@ DIALS: list[tuple[str, str, float, float, float, float]] = [
 SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
     ("control_room", "Control_Rooms/Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
     ("control_room", "Control_Rooms/Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
+    # console, the vertical bar between the drill screen and the depth panel: modelled at the top, slides down
+    ("control_room", "Control_Rooms/Fuel_Level.glb", 0.0, 100.0, 0.637),           # the fuel (src/fuel.py)
 ]
 # Valves (src/interactable.py), grabbed and turned by moving the mouse left / right: (car, file).
 VALVES: list[tuple[str, str]] = [
@@ -156,6 +163,31 @@ ENGINE_MAX_SPIN: float = 360.0           # degrees / s the engine model turns at
 DRILL_SPEED: float = 2.0                 # metres / s the drill digs down at full engine speed (depth)
 ENGINE_SOUND_VOLUME: float = 1.0         # at full speed
 ENGINE_SOUND_PITCH: tuple[float, float] = (0.5, 1.1)   # at standstill, at full speed
+
+# ---------------- Fuel (src/fuel.py) ----------------
+# Coal: click the stockpile in the storage room to take a piece, carry it to the engine room, click the furnace hatch
+# to open it and click it again to throw the coal in. The engine burns it as it turns; the bar on the console (between
+# the drill screen and the depth panel: Fuel_Level, in SLIDING_DIALS) shows how much is left.
+COAL_PILE: tuple[str, str, str] = ("storage_room", "Storage_Rooms/Coal_Stockpile.obj",
+                                   "Storage_Rooms/Coal_Stockpile_Navmesh.obj")   # (car, model, solid), in place
+COAL_MODEL: str = "Storage_Rooms/Coal.obj"   # the piece you carry (modelled at its own origin)
+COAL_HELD_OFFSET: tuple[float, float, float] = (0.24, -0.19, 0.55)   # in your hand: right, up, forward of the eye
+COAL_HELD_SCALE: float = 0.35
+COAL_TAKE_SOUND: str = "shoveling-coal.wav"      # from the pile when you take a piece
+COAL_FEED_SOUND: str = "pebles-hitting-metal.mp3"   # from the hatch when it goes in
+HATCH: tuple[str, str] = ("engine_room", "Engine_Rooms/Engine_Hatch.glb")   # the furnace door, rigged, in place
+HATCH_THROW: float = 100.0      # degrees it swings open about its bone (outwards, into the room)
+HATCH_OPEN_TIME: float = 0.6    # seconds it takes, each way (its sound: SWITCH_SOUNDS)
+FUEL_DIAL: str = "fuel_level"   # the fuel bar on the console
+FUEL_START: float = 0.6         # 0..1
+FUEL_PER_COAL: float = 0.1      # one piece of coal
+FUEL_BURN: float = 0.003        # fuel / s at full engine speed (times its speed): a piece every ~33 s,
+FUEL_BURN_PER_METRE: float = 0.000003   # + this per metre of depth (1000 m doubles it),
+FUEL_BURN_MAX: float = 0.006    # but never more
+FUEL_LOW: float = 0.3           # below this the engine loses power, down to none at 0 (it dies on the way)
+FUEL_OVERCLOCK: float = 0.9     # above this it overclocks: more power, up to
+FUEL_OVERCLOCK_BOOST: float = 1.3   # x this at full (130 % speed: digs and burns faster)
+FUEL_OVERCLOCK_HEAT: float = 0.03   # and heats the drill: temperature / s at full, on top of the depth's heat
 
 # ---------------- Console screens (src/screens.py) ----------------
 # Drawn as quads just in front of the control room console's panels, in car coordinates (the car's position is
@@ -239,7 +271,11 @@ COMPUTER_SCREENS: tuple[Path, Path] = (MODELS_DIR / "Textures" / "data_1.png",  
                                        MODELS_DIR / "Textures" / "data_2.png")   # ready to send
 COMPUTER_SCREEN_WIDTH: int = 1024      # the pictures are 3508 px wide: scaled down when loaded
 COMPUTER_COOLDOWN: float = 60.0        # seconds it collects before the data is ready again
-COMPUTER_SEND_SOUND: str = "morse-premade-message-nomeaning.mp3"   # from the computer when it sends
+# When it sends, it beeps the depth in Morse code: a sine tone made in code (computer.morse_wave), not a recording
+COMPUTER_MORSE_TONE: float = 700.0     # Hz
+COMPUTER_MORSE_UNIT: float = 0.07      # seconds per dot (a dash is 3); ~17 words per minute
+COMPUTER_MORSE_VOLUME: float = 0.5     # of full scale
+COMPUTER_MORSE_RATE: int = 44100       # samples / s
 
 # ---------------- Alarm (src/alarm.py) ----------------
 # While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
@@ -257,20 +293,33 @@ DEATH_EXPLOSION_AT: float = 5.2     # seconds into the sound where the bang is
 DEATH_SHAKE: float = 0.04           # how far (units) the view shakes just before the bang (grows from 0)
 DEATH_FLASH_COLOR: pr.Color = pr.Color(255, 190, 120, 255)
 DEATH_FLASH_TIME: float = 1.5       # the flash fades to black over this
-DEATH_TEXT_AT: float = 2.0          # seconds after the bang the death text fades in
-DEATH_CONTINUE_AT: float = 4.0      # seconds after the bang a click / key goes back to the menu
+DEATH_TEXT_AT: float = 2.0          # seconds after the bang the run's report fades in (you can type your name)
+DEATH_CONTINUE_AT: float = 4.0      # seconds after the bang Enter saves it / Esc skips it, back to the menu
 PASS_OUT_FADE: float = 3.0          # passing out: seconds the screen takes to go black (no explosion)
 DEATH_TITLE: str = "MISSION FAILED"
-# What happened, under the title (to be replaced by a proper replay); the depth reached goes under it.
-DEATH_TEXT_ENGINE: str = "Motor se zastavil a vrták vybuchl."
-DEATH_TEXT_OXYGEN_LOW: str = "Bezvědomí: nedostatek kyslíku."
-DEATH_TEXT_OXYGEN_HIGH: str = "Bezvědomí: příliš mnoho kyslíku."
-DEATH_TEXT_HOT: str = "Bezvědomí: vrták se přehřál."
-DEATH_TEXT_COLD: str = "Bezvědomí: chlazení vše zmrazilo."
-# raylib's own font has no Czech letters: the texts use the first of these fonts that exists (put a .ttf in Fonts/
-# to ship one with the game); with none, the letters lose their accents.
-DEATH_FONTS: list[Path] = [ROOT / "Fonts" / "death.ttf", Path("C:/Windows/Fonts/consola.ttf"),
-                           Path("C:/Windows/Fonts/arial.ttf")]
+# What failed: the run's report (records.py) and the statistics show it.
+DEATH_TEXT_ENGINE: str = "Výbuch motoru"
+DEATH_TEXT_FUEL: str = "Došlo palivo"
+DEATH_TEXT_OXYGEN_LOW: str = "Nedostatek kyslíku"
+DEATH_TEXT_OXYGEN_HIGH: str = "Přebytek kyslíku"
+DEATH_TEXT_HOT: str = "Přehřátí"
+DEATH_TEXT_COLD: str = "Podchlazení"
+DEATH_NAME_LENGTH: int = 20         # letters you can type for the report's name
+DEATH_UNNAMED: str = "Neznámý"      # saved with no name typed
+
+# ---------------- Records, statistics (src/records.py, src/stats.py) ----------------
+RUNS_FILE: Path = ROOT / "runs.json"   # every saved run's report (not in git)
+
+# ---------------- Pause (src/pause.py) ----------------
+PAUSE_QUESTION: str = "Opravdu chcete odejít?\nProgress není uložen."
+PAUSE_LEAVE: str = "Odejít"            # back to the main menu
+PAUSE_RESUME: str = "Zpět do hry"
+
+# ---------------- UI text (src/ui.py) ----------------
+# raylib's own font has no Czech letters: the menus and screens use the first of these fonts that exists (put a
+# .ttf in Fonts/ to ship one with the game); with none, the letters lose their accents.
+UI_FONTS: list[Path] = [ROOT / "Fonts" / "ui.ttf", ROOT / "Fonts" / "death.ttf",
+                        Path("C:/Windows/Fonts/consola.ttf"), Path("C:/Windows/Fonts/arial.ttf")]
 
 # ---------------- Life support (src/life_support.py) ----------------
 # Oxygen and cooling, each kept by two valves in the oxygen room: the red one sets the PRESSURE (how hard the system

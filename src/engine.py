@@ -4,7 +4,9 @@
     engine.update(dt)    # every frame, after the valve and the button have updated
 
 - Power = how far the engine valve is open: 0..ENGINE_VALVE_TURNS turns = 0..100 % (the valve stops there).
-- `speed` (0..1) is how fast the motor really turns. It follows the power slowly (ENGINE_SPIN_UP / _DOWN: a heavy
+- `drive` = the power times the fuel's factor (fuel.py): less when the fuel runs low (0 when empty), more than the
+  power when overclocked (above 90 % fuel), so the speed can go past 100 %.
+- `speed` (0..1, more when overclocked) is how fast the motor really turns. It follows the drive slowly (ENGINE_SPIN_UP / _DOWN: a heavy
   flywheel), so turning the valve down doesn't kill it straight away. The engine model spins at
   ENGINE_MAX_SPIN * speed, the engine sound's volume and pitch follow it, and the power dial on the console shows it
   (its red sector is 0..30 %, the rest of the face 30..100 %: ENGINE_DIAL_RED).
@@ -53,6 +55,7 @@ class Engine:
         self.state: EngineState = EngineState.RUNNING
         self.speed: float = ENGINE_START_POWER
         self.depth: float = 0.0   # metres dug so far
+        self.fuel_factor: float = 1.0   # what the fuel does to the power (see `drive`)
         self._valve_target: float | None = None   # the angle a restart is turning the valve up to
         for part in (spinner, valve, button):   # its state shows in the debug panel when you look at them
             part.debug_extra = self.debug_lines
@@ -61,6 +64,11 @@ class Engine:
     def power(self) -> float:
         """0..1: how far the engine valve is open."""
         return self.valve.angle / self.valve.max_angle
+
+    @property
+    def drive(self) -> float:
+        """The power the fuel lets it have: what its speed follows."""
+        return self.power * self.fuel_factor
 
     @property
     def failing(self) -> bool:
@@ -83,14 +91,16 @@ class Engine:
             self._valve_target = target
             self.valve.spin = ENGINE_RESTART_VALVE_SPIN
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float, fuel_factor: float = 1.0) -> None:
+        """`fuel_factor`: Fuel.factor (1 = no effect)."""
+        self.fuel_factor = fuel_factor
         if self._valve_target is not None and self.valve.angle >= self._valve_target:
             self.valve.spin = 0.0
             self._valve_target = None
 
         if self.state == EngineState.RUNNING and self.speed < ENGINE_MIN_POWER:
-            self._set_state(EngineState.DYING, f"died at {self.power:.0%} power; press the power button while it "
-                                               f"still spins")
+            self._set_state(EngineState.DYING, f"died at {self.power:.0%} power (x{self.fuel_factor:.2f} fuel); "
+                                               f"press the power button while it still spins")
         elif self.state == EngineState.DYING:
             if self.button.flipped:
                 self._turn_valve_up()
@@ -100,19 +110,20 @@ class Engine:
         elif self.state == EngineState.STARTING:
             if self.speed >= ENGINE_MIN_POWER:
                 self._set_state(EngineState.RUNNING, f"running again at {self.power:.0%} power")
-            elif self._valve_target is None and self.power < ENGINE_MIN_POWER:
-                self._set_state(EngineState.DYING, f"valve turned down to {self.power:.0%} while restarting")
+            elif self._valve_target is None and self.drive < ENGINE_MIN_POWER:
+                self._set_state(EngineState.DYING, f"only {self.drive:.0%} power while restarting (valve "
+                                                   f"{self.power:.0%}, x{self.fuel_factor:.2f} fuel)")
 
-        # how fast it really turns: slowly towards the power while it runs, coasting down once it died
+        # how fast it really turns: slowly towards the drive while it runs, coasting down once it died
         if self.state in (EngineState.RUNNING, EngineState.STARTING):
-            if self.power > self.speed:
-                self.speed = min(self.speed + ENGINE_SPIN_UP * dt, self.power)
+            if self.drive > self.speed:
+                self.speed = min(self.speed + ENGINE_SPIN_UP * dt, self.drive)
             else:
-                self.speed = max(self.speed - ENGINE_SPIN_DOWN * dt, self.power)
+                self.speed = max(self.speed - ENGINE_SPIN_DOWN * dt, self.drive)
         else:
             self.speed = max(self.speed - ENGINE_COAST_RATE * dt, 0.0)
 
-        self.depth += DRILL_SPEED * self.speed * dt   # it digs as fast as it turns (more fuel to go faster: later)
+        self.depth += DRILL_SPEED * self.speed * dt   # it digs as fast as it turns
         self.spinner.speed = ENGINE_MAX_SPIN * self.speed
         if self.dial is not None:
             self.dial.value = self.dial.low + (self.dial.high - self.dial.low) * self._dial_fraction()
@@ -123,7 +134,8 @@ class Engine:
 
     def _dial_fraction(self) -> float:
         """How far round the power dial's face (0..1 of a turn from the red sector's first edge) the speed is:
-        0..ENGINE_MIN_POWER fills the red sector, the rest of the speed the rest of the face."""
+        0..ENGINE_MIN_POWER fills the red sector, the rest of the speed the rest of the face (overclocked: past
+        a full turn, the dial stops at its end)."""
         red_from, red_to = ENGINE_DIAL_RED
         red = (red_to - red_from) / 360.0
         if self.speed < ENGINE_MIN_POWER:
@@ -131,4 +143,5 @@ class Engine:
         return red + (1.0 - red) * (self.speed - ENGINE_MIN_POWER) / (1.0 - ENGINE_MIN_POWER)
 
     def debug_lines(self) -> list[str]:
-        return [f"engine: {self.state.value}, power {self.power:.0%}, speed {self.speed:.0%}, depth {self.depth:.0f} m"]
+        return [f"engine: {self.state.value}, power {self.power:.0%} x{self.fuel_factor:.2f} fuel, "
+                f"speed {self.speed:.0%}, depth {self.depth:.0f} m"]
