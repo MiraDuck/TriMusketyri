@@ -82,13 +82,16 @@ ITEMS: list[tuple[str, str, pr.Vector3]] = [
 ]
 # Moving parts: rigged .glb files modelled in place in a car (same origin as the car), so each is placed at the
 # position of the car it names (see DRILL_CARS). The entity's name is the file name in lower case (oxygen_level).
-# Dials (src/dial.py): (car, file, low, high, sweep in degrees). The modelled needle pose shows `low`.
-DIALS: list[tuple[str, str, float, float, float]] = [
-    ("control_room", "Control_Rooms/Temperature_Pressure.glb", 0.0, 100.0, 360.0),   # console, left
-    ("control_room", "Control_Rooms/Oxygen_Pressure.glb", 0.0, 100.0, 360.0),        # console, right
-    ("control_room", "Control_Rooms/Power_Dial.glb", 0.0, 100.0, 360.0),             # flat gauge on the console
-    ("oxygen_room", "Oxygen_Rooms/Oxygen_Dial.glb", 0.0, 100.0, 360.0),
-    ("oxygen_room", "Oxygen_Rooms/Temperature_Dial.glb", 0.0, 100.0, 360.0),
+# Dials (src/dial.py): (car, file, low, high, sweep in degrees, start: degrees clockwise from the modelled pose,
+# straight up, where `low` is). The control room's faces have a red sector at the bottom (145..215 deg).
+DIALS: list[tuple[str, str, float, float, float, float]] = [
+    # console, left / right: cooling / oxygen pressure, round from the red sector's left edge to its right one
+    ("control_room", "Control_Rooms/Temperature_Pressure.glb", 0.0, 100.0, 290.0, 215.0),
+    ("control_room", "Control_Rooms/Oxygen_Pressure.glb", 0.0, 100.0, 290.0, 215.0),
+    ("control_room", "Control_Rooms/Power_Dial.glb", 0.0, 100.0, 360.0, 0.0),   # the engine sets its own (engine.py)
+    # on the tanks, plain faces: oxygen level / temperature, from lower left round to lower right
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Dial.glb", 0.0, 100.0, 270.0, 225.0),
+    ("oxygen_room", "Oxygen_Rooms/Temperature_Dial.glb", 0.0, 100.0, 270.0, 225.0),
 ]
 # Sliding dials, a marker moving left / right along a straight scale (its Move animation, along the bone's -X):
 # (car, file, low, high, distance it slides from low to high). Low and high are inside the red end blocks.
@@ -99,7 +102,7 @@ SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
 # Valves (src/interactable.py), grabbed and turned by moving the mouse left / right: (car, file).
 VALVES: list[tuple[str, str]] = [
     ("oxygen_room", "Oxygen_Rooms/Oxygen_Valve.glb"),
-    ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),   # TODO: exported at the same spot as Oxygen_Valve
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),
     ("oxygen_room", "Oxygen_Rooms/Temperature_Valve.glb"),
     ("oxygen_room", "Oxygen_Rooms/Temperature_Blue_Valve.glb"),   # on the pipe by the front door
     ("engine_room", "Engine_Rooms/Engine_Valve.glb"),        # back wall, by the door
@@ -148,8 +151,26 @@ ENGINE_SPIN_UP: float = 0.05             # how fast its speed follows the valve 
 ENGINE_SPIN_DOWN: float = 0.04           # and down (100 % -> 30 % in ~18 s: time to turn it back up)
 ENGINE_COAST_RATE: float = 0.015         # how fast it slows down once it died (30 % -> stopped in 20 s)
 ENGINE_MAX_SPIN: float = 360.0           # degrees / s the engine model turns at full speed
+DRILL_SPEED: float = 2.0                 # metres / s the drill digs down at full engine speed (depth)
 ENGINE_SOUND_VOLUME: float = 1.0         # at full speed
 ENGINE_SOUND_PITCH: tuple[float, float] = (0.5, 1.1)   # at standstill, at full speed
+
+# ---------------- Console screens (src/screens.py) ----------------
+# Drawn as quads just in front of the control room console's panels, in car coordinates (the car's position is
+# added): (top left, top right, bottom right, bottom left) as you see them standing at the console.
+# The display left of the vertical depth gauge (the green grid): the drill turning, drill_1..4 cycled.
+DRILL_SCREEN_CORNERS: tuple[pr.Vector3, ...] = (
+    pr.Vector3(0.765, 2.19, 3.784), pr.Vector3(-0.1, 2.19, 3.784),
+    pr.Vector3(-0.1, 1.712, 3.784), pr.Vector3(0.765, 1.712, 3.784))
+DRILL_SCREEN_FRAMES: list[Path] = [MODELS_DIR / "Textures" / f"drill_{i}.png" for i in (1, 2, 3, 4)]
+DRILL_SCREEN_FPS: float = 4.0          # frames / s at full engine speed (stands still when it stops)
+# The black panel right of the gauge: the depth.
+DEPTH_PANEL_CORNERS: tuple[pr.Vector3, ...] = (
+    pr.Vector3(-0.328, 2.269, 3.683), pr.Vector3(-0.712, 2.269, 3.683),
+    pr.Vector3(-0.712, 1.648, 3.683), pr.Vector3(-0.328, 1.648, 3.683))
+DEPTH_PANEL_SIZE: tuple[int, int] = (248, 400)   # its texture, pixels (the panel's proportions)
+SCREEN_GREEN: pr.Color = pr.Color(70, 190, 70, 255)   # the screens' green
+SCREEN_BLACK: pr.Color = pr.Color(28, 28, 30, 255)
 
 # ---------------- Alarm (src/alarm.py) ----------------
 # While the motor is down every lamp that is on flashes red, and each flash beeps from the nearest lit lamp.
@@ -160,11 +181,60 @@ ALARM_SOUND: str = "error-warning.wav"
 ALARM_NEAR: float = 3.0             # the beep is full volume this close to the lamp,
 ALARM_FAR: float = 12.0             # and gone this far (from a dark car the next lit one is quiet)
 
+# ---------------- Death (src/death.py) ----------------
+# When the motor stops for good every light goes out, the failure sound plays and the drill explodes: you die.
+DEATH_SOUND: str = "engine-faliure-explosion.wav"   # (sic, the file's name) rumbles, then the bang
+DEATH_EXPLOSION_AT: float = 5.2     # seconds into the sound where the bang is
+DEATH_SHAKE: float = 0.04           # how far (units) the view shakes just before the bang (grows from 0)
+DEATH_FLASH_COLOR: pr.Color = pr.Color(255, 190, 120, 255)
+DEATH_FLASH_TIME: float = 1.5       # the flash fades to black over this
+DEATH_TEXT_AT: float = 2.0          # seconds after the bang the death text fades in
+DEATH_CONTINUE_AT: float = 4.0      # seconds after the bang a click / key goes back to the menu
+PASS_OUT_FADE: float = 3.0          # passing out: seconds the screen takes to go black (no explosion)
+DEATH_TITLE: str = "MISSION FAILED"
+# What happened, under the title (to be replaced by a proper replay); the depth reached goes under it.
+DEATH_TEXT_ENGINE: str = "Motor se zastavil a vrták vybuchl."
+DEATH_TEXT_OXYGEN_LOW: str = "Bezvědomí: nedostatek kyslíku."
+DEATH_TEXT_OXYGEN_HIGH: str = "Bezvědomí: příliš mnoho kyslíku."
+DEATH_TEXT_HOT: str = "Bezvědomí: vrták se přehřál."
+DEATH_TEXT_COLD: str = "Bezvědomí: chlazení vše zmrazilo."
+# raylib's own font has no Czech letters: the texts use the first of these fonts that exists (put a .ttf in Fonts/
+# to ship one with the game); with none, the letters lose their accents.
+DEATH_FONTS: list[Path] = [ROOT / "Fonts" / "death.ttf", Path("C:/Windows/Fonts/consola.ttf"),
+                           Path("C:/Windows/Fonts/arial.ttf")]
+
+# ---------------- Life support (src/life_support.py) ----------------
+# Oxygen and cooling, each kept by two valves in the oxygen room: the red one sets the PRESSURE (how hard the system
+# pushes), the blue one the IDEAL LEVEL (where it pushes the level to). The level moves towards the ideal at
+# coupling * pressure per second, while something pulls it away: you breathe the oxygen, the depth heats the drill.
+# Turned all the way the valves are 0 / 100 %. Keep both levels inside LIFE_SAFE or you pass out.
+LIFE_VALVE_TURNS: float = 1.0          # turns from closed to fully open
+LIFE_PRESSURE_RATE: float = 0.5        # how fast the pressure follows its valve (of the gap per s)
+LIFE_SAFE: tuple[float, float] = (0.25, 0.75)   # levels (0..1) you can live in; the sliders' red ends are outside
+LIFE_PASS_OUT_TIME: float = 10.0       # seconds outside the safe levels until you pass out (recovers at half that rate)
+# (red valve, blue valve, the dials that show the pressure, the dials that show the level)
+OXYGEN_PARTS: tuple[str, str, tuple[str, ...], tuple[str, ...]] = (
+    "oxygen_valve", "oxygen_blue_valve", ("oxygen_pressure",), ("oxygen_level", "oxygen_dial"))
+COOLING_PARTS: tuple[str, str, tuple[str, ...], tuple[str, ...]] = (
+    "temperature_valve", "temperature_blue_valve", ("temperature_pressure",), ("temperature_level", "temperature_dial"))
+OXYGEN_COUPLING: float = 0.1           # the oxygen follows its ideal level slowly,
+COOLING_COUPLING: float = 0.3          # the temperature 3x as strongly (easy to overcool)
+OXYGEN_USE: float = 0.01               # oxygen level you breathe away per s (with no pressure: 0.5 -> 0.25 in 25 s)
+HEAT: float = 0.01                     # temperature level the drill heats up by per s at the surface,
+HEAT_PER_METRE: float = 0.00005        # + this per metre of depth (500 m doubles it: cool harder the deeper you go)
+HEAT_MAX: float = 0.1                  # but never more (reached at 1800 m), so the cooling can always keep up
+# Start: (red valve, blue valve, level). Oxygen: the ideal is the blue valve's opening. Cooling: opening the blue valve
+# more cools more (ideal temperature = 1 - its opening). Both start balanced around the middle.
+OXYGEN_START: tuple[float, float, float] = (0.5, 0.7, 0.5)
+COOLING_START: tuple[float, float, float] = (0.5, 0.55, 0.5)
+
 # ---------------- Faults (src/faults.py) ----------------
 # Each kind of fault: every <interval> seconds (a random time in that range) it has a <chance> to happen.
 LIGHT_FAULT_INTERVAL: tuple[float, float] = (60.0, 120.0)   # a random breaker flips (always)
-FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)           # for the faults still to come (valves)
-FAULT_CHANCE: float = 0.25
+FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)           # a random valve starts drifting,
+FAULT_CHANCE: float = 0.25                                  # with this chance (so about every 40 s)
+VALVE_DRIFT_RATE: float = 0.02   # how fast a drifting valve creeps: of its whole range per s (2 % / s), either way
+VALVE_DRIFT_AMOUNT: float = 0.1  # how far it creeps before it stops by itself: of its range (10 %, in ~5 s)
 
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness of a car with its lamp on, where the lamp doesn't reach (0 = black)
@@ -191,7 +261,7 @@ VIGNETTE_SOFTNESS: float = 0.45   # and reaches full strength this much further 
 
 # ---------------- Interactables ----------------
 VALVE_TURN_SPEED: float = 0.1    # degrees per pixel of left / right mouse movement while holding a valve
-VALVE_BREAK_SPIN: float = 90.0   # degrees / s a broken valve turns on its own (valve.spin)
+VALVE_FIX_TIME: float = 1.5      # seconds you hold a drifting valve to stabilize it (stops its drift)
 
 # ---------------- Player cuboid ----------------
 PLAYER_HALF: pr.Vector3 = pr.Vector3(0.4, 0.75, 0.4)

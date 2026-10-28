@@ -28,7 +28,8 @@ class Dial(Entity):
     lag instead of jumping."""
 
     def __init__(self, name: str, model_path: str | Path, pos: pr.Vector3,
-                 low: float = 0.0, high: float = 1.0, sweep: float = 270.0, slide: float = 0.0) -> None:
+                 low: float = 0.0, high: float = 1.0, sweep: float = 270.0, slide: float = 0.0,
+                 start: float = 0.0) -> None:
         super().__init__(name, model_path, pos)
         self.pivot, y = bone_pivot_axis(self.model)
         # positive angles about -Y turn clockwise when you look at the face down the bone's Y axis
@@ -36,7 +37,7 @@ class Dial(Entity):
         self.low: float = low
         self.high: float = high
         self.sweep: float = sweep
-        self.start: float = 0.0
+        self.start: float = start
         self.slide: float = slide
         self.slide_dir: pr.Vector3 = pr.vector3_negate(bone_x(self.model))
         self.value: float = low
