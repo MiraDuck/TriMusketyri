@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pyray as pr
 
-from .config import LEVER_FLIP_TIME, VALVE_TURN_SPEED
+from .config import LEVER_FLIP_TIME, VALVE_FIX_TIME, VALVE_TURN_SPEED
 from .entity import Entity, bone_pivot_axis, rotation_about
 
 
@@ -103,12 +103,11 @@ class Valve(Interactable):
     Right turns it clockwise as you see it (closes), left counter-clockwise (opens).
 
     `angle` (degrees, 0 = closed, up to `max_angle`; None = no upper limit) is kept between grabs.
-    `turning` is True while it moved this frame (by hand or by `spin`).
-    `spin` (degrees / s) turns it on its own for emergencies: positive opens, negative closes (and stops at 0),
-    0 stops it. It keeps going while held, so the player has to fight it.
-
-        valve.spin = VALVE_BREAK_SPIN    # broken: starts opening by itself
-        valve.spin = 0.0                 # repaired
+    `turning` is True while it moved this frame (by hand, `spin` or `drift`).
+    `spin` (degrees / s) turns it on its own, for the game (the engine opens its valve after a restart): positive
+    opens, negative closes (and stops at 0), 0 stops it.
+    `drift` (degrees / s) is the same for a fault (faults.py), started by `start_drift(speed, degrees)`: it creeps
+    `degrees` by itself, then stops; the player turns it back. Holding it for VALVE_FIX_TIME stops it sooner.
 
     A rigged one (.glb) turns about its bone's Y axis through its head; otherwise about `axis` (model space)
     through the centre of its box.
@@ -121,6 +120,10 @@ class Valve(Interactable):
         self.angle: float = 0.0
         self.max_angle: float | None = None
         self.spin: float = 0.0
+        self.drift: float = 0.0
+        self._drift_left: float = 0.0   # degrees it still creeps
+        self.held: bool = False
+        self._held_for: float = 0.0   # while drifting: how long it has been held
         self.turning: bool = False
         self._last_angle: float = 0.0
         if self.model.skeleton.boneCount:
@@ -140,6 +143,10 @@ class Valve(Interactable):
         if self.max_angle is not None:
             self.angle = min(self.angle, self.max_angle)
 
+    def start_drift(self, speed: float, degrees: float) -> None:
+        """A fault: creep `degrees` at `speed` deg/s (negative = shut) by itself, then stop."""
+        self.drift, self._drift_left = speed, degrees
+
     def set_angle(self, degrees: float) -> None:
         """Put it at `degrees` straight away (a start setting): not a turn, so `turning` stays False."""
         self.angle = self._last_angle = degrees
@@ -147,21 +154,33 @@ class Valve(Interactable):
     def grab(self, camera: pr.Camera3D) -> None:
         forward = pr.vector3_subtract(camera.target, camera.position)
         self._facing = -1.0 if pr.vector3_dot_product(self.axis, forward) < 0 else 1.0
+        self.held = True
 
     def drag(self, delta: pr.Vector2) -> None:
         # a positive angle is counter-clockwise when the axis points at you, so mouse right (clockwise) subtracts
         self.turn(delta.x * VALVE_TURN_SPEED * self._facing)
 
     def release(self) -> None:
+        self.held = False
         print(f"{self.name}: {self.angle:.0f} deg ({self.turns:.2f} turns open)")
 
     def debug_lines(self) -> list[str]:
-        state = f"angle: {self.angle:.1f} deg ({self.turns:.2f} turns), spin {self.spin:g} deg/s"
+        state = (f"angle: {self.angle:.1f} deg ({self.turns:.2f} turns), spin {self.spin:g}, "
+                 f"drift {self.drift:.1f} deg/s")
         return super().debug_lines() + [state]
 
     def update(self, dt: float) -> None:
-        if self.spin:
-            self.turn(self.spin * dt)
+        creep = 0.0
+        if self.drift:   # a fault: it creeps until it has gone its distance, or it was held long enough
+            creep = min(abs(self.drift) * dt, self._drift_left)
+            self._drift_left -= creep
+            creep = creep if self.drift > 0 else -creep
+            self._held_for = self._held_for + dt if self.held else 0.0
+            if self._held_for >= VALVE_FIX_TIME or self._drift_left <= 0:
+                print(f"{self.name}: {'stabilized' if self._drift_left > 0 else 'stopped drifting'}")
+                self.drift = 0.0
+        if self.spin or creep:
+            self.turn(self.spin * dt + creep)
         self.turning = self.angle != self._last_angle
         self._last_angle = self.angle
         self.set_transform(rotation_about(self.pivot, self.axis, self.angle))

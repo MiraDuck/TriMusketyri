@@ -205,7 +205,8 @@ class Audio:
         return pr.is_sound_playing(self.sounds[name])
 
     # ---------------- Cleanup ----------------
-    def unload(self) -> None:
+    def clear(self) -> None:
+        """Stop and free the music, sources and sounds; the device stays open for the next ones."""
         self.stop_music()
         for source in self.sources.values():
             source.unload()
@@ -213,4 +214,7 @@ class Audio:
         for sound in self.sounds.values():
             pr.unload_sound(sound)
         self.sounds.clear()
+
+    def unload(self) -> None:
+        self.clear()
         pr.close_audio_device()
