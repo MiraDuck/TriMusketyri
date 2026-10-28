@@ -50,8 +50,6 @@ DEBUG_REACH: float = 20.0    # with hitboxes on (F1), how far away the thing you
 # next one CAR_LENGTH further along -z (the control room's closed end faces +z).
 DRILL_POS: pr.Vector3 = pr.Vector3(0, 1, 0)
 CAR_LENGTH: float = 8.0
-ROOM_MODEL: Path = MODELS_DIR / "Room.obj"
-ROOM_COLLISION: Path = MODELS_DIR / "Room_Navmesh.obj"
 DRILL_CARS: list[tuple[str, Path, Path]] = [
     ("control_room", MODELS_DIR / "Control_Rooms" / "Control_Room.obj", MODELS_DIR / "Control_Rooms" / "Control_Room_Navmesh.obj"),
     ("rest_room", MODELS_DIR / "Rest_Rooms" / "Rest_Room.obj", MODELS_DIR / "Rest_Rooms" / "Rest_Room_Navmesh.obj"),
@@ -83,22 +81,24 @@ DIALS: list[tuple[str, str, float, float, float]] = [
 # (car, file, low, high, distance it slides from low to high). Low and high are inside the red end blocks.
 SLIDING_DIALS: list[tuple[str, str, float, float, float]] = [
     ("control_room", "Control_Rooms/Temperature_Level.glb", 0.0, 100.0, 0.637),   # console, left side panel
-    ("control_room", "Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
+    ("control_room", "Control_Rooms/Oxygen_Level.glb", 0.0, 100.0, 0.637),        # console, right side panel
 ]
 # Valves (src/interactable.py), grabbed and turned like VALVE_MODEL: (car, file).
 VALVES: list[tuple[str, str]] = [
-    ("oxygen_room", "Oxygen_Rooms/Oxygen_Valve.glb"),
+    ("oxygen_room", "Oxygen_Rooms/Oxygen_Blue_Valve.glb"),   # blue copy of Oxygen_Valve.glb, same place: one of them
     ("oxygen_room", "Oxygen_Rooms/Temperature_Valve.glb"),
+    ("engine_room", "Engine_Rooms/Engine_Valve.glb"),        # back wall, by the door
 ]
 # Levers / switches / breakers (src/interactable.py): (car, file, degrees they swing when pulled down).
 SWITCHES: list[tuple[str, str, float]] = [
-    *[("control_room", f"Control_Rooms/Breaker_{i}.glb", 180.0) for i in range(1, 6)],   # back wall, flip from up to down
-    ("control_room", "Control_Rooms/Power_Lever.glb", -90.0),                            # console, twists a quarter turn
+    # back wall, flip from up to down
+    *[("control_room", f"Control_Rooms/Breaker_{i}.glb", 180.0) for i in range(1, 6)],
+    ("control_room", "Control_Rooms/Power_Lever.glb", -90.0),   # console, twists a quarter turn
 ]
 LEVER_FLIP_TIME: float = 0.25   # seconds a lever / switch takes to swing over
 # Spinning parts (src/spinner.py): (car, file, degrees / s).
 SPINNERS: list[tuple[str, str, float]] = [
-    ("engine_room", "Endine_Rooms/Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
+    ("engine_room", "Engine_Rooms/Engine_Spin.glb", 216.0),   # the engine; 216 deg/s = its Spin360 animation's speed
 ]
 # Which car's lamp each breaker switches (up = on). The light changes as the handle passes halfway.
 BREAKER_LAMPS: dict[str, str] = {
@@ -109,6 +109,11 @@ BREAKER_LAMPS: dict[str, str] = {
     "breaker_5": "control_room",
 }
 DIAL_NEEDLE_SPEED: float = 4.0   # how fast needles follow their value (higher = snappier, ~1/s to settle)
+
+# ---------------- Faults (src/faults.py) ----------------
+# Every FAULT_INTERVAL seconds (a random time in that range) something has a FAULT_CHANCE to break.
+FAULT_INTERVAL: tuple[float, float] = (5.0, 15.0)
+FAULT_CHANCE: float = 0.25   # 0 = nothing ever breaks, 1 = something breaks every time
 
 # ---------------- Lighting (src/lighting.py) ----------------
 LIGHT_AMBIENT: float = 0.3   # brightness of a car with its lamp on, where the lamp doesn't reach (0 = black)

@@ -13,7 +13,9 @@ Hitbox:
 """
 from __future__ import annotations
 
+import json
 import math
+import struct
 from pathlib import Path
 
 import pyray as pr
@@ -38,6 +40,26 @@ def warn_big_mtl(model_path: str | Path) -> None:
                     print(f"WARNING: {mtl.name} ({path.name}) has {count} materials; raylib may hang on "
                           f"{MTL_HANG_RISK}+. Remove the unused ones in Blender.", flush=True)
             return
+
+
+def warn_glb_rig(model_path: str | Path) -> None:
+    """Print a warning before loading a .glb whose rig raylib can't use as one moving part, naming the file:
+    raylib only reads the first armature (a second one's mesh gets moved by the first one's bone), and a part with
+    no armature can't turn (Dial / Lever / Spinner then stop with "the model has no bone")."""
+    path = Path(model_path)
+    if path.suffix.lower() != ".glb":
+        return
+    with path.open("rb") as f:
+        f.seek(12)   # the .glb header, then the JSON chunk: its length, its type, the JSON
+        length = struct.unpack("<I", f.read(4))[0]
+        f.seek(20)
+        skins = len(json.loads(f.read(length)).get("skins", []))
+    if skins > 1:
+        print(f"WARNING: {path.name} has {skins} armatures; only the first one is used. Export just the part and "
+              f"its armature (Limit to: Selected Objects).", flush=True)
+    elif skins == 0:
+        print(f"WARNING: {path.name} has no armature; export the part together with its armature to move it.",
+              flush=True)
 
 
 def rotation_about(pivot: pr.Vector3, axis: pr.Vector3, degrees: float) -> pr.Matrix:
@@ -137,6 +159,7 @@ class Entity:
         self.model_path: Path = Path(model_path)
         self.collision_path: Path | None = Path(collision_path) if collision_path else None
         warn_big_mtl(model_path)
+        warn_glb_rig(model_path)
         self.model: pr.Model = pr.load_model(str(model_path))
         load_unicode_textures(self.model, model_path)
         if self.model.skeleton.boneCount:

@@ -12,6 +12,7 @@ from src.controls import handle_hotkeys, handle_interaction, move_axes, move_cam
 from src.debug import DebugOptions, looked_at
 from src.dial import Dial
 from src.entity import Entity
+from src.faults import FaultDirector
 from src.head_bob import HeadBob
 from src.interactable import Interactable, Lever, Valve
 from src.lighting import Lamp, Light, Lighting
@@ -105,6 +106,7 @@ def main() -> None:
     player = Player(camera)
     bob = HeadBob()
     debug = DebugOptions()
+    faults = FaultDirector([breaker for breaker, _ in breaker_lamps])
     valve_break_at = config.VALVE_BREAK_TEST_AT
     dial_test_at = 0.0   # TEST (remove): next time the dials get new random values
 
@@ -120,6 +122,9 @@ def main() -> None:
         move_camera(camera, camera_mode, dt, look=held is None)
 
         # ---- world ----
+        faults.update(dt)   # every 5-15 s something may break (a breaker trips)
+        if pr.is_key_pressed(pr.KeyboardKey.KEY_F3):   # debug: break something now
+            faults.cause_fault()
         # Emergency example: set VALVE_BREAK_TEST_AT in config and the valve starts turning by itself then.
         # Real faults will do the same from the fault director: valve.spin = speed (0 = repaired).
         if valve_break_at is not None and pr.get_time() >= valve_break_at:
