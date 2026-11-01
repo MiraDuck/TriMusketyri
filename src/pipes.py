@@ -1,6 +1,6 @@
 """Pipes: the oxygen and cooling pipes, one of each in every car. They burst under pressure; you fix them by hand.
 
-    pipes = Pipes([Pipe(...), ...], audio, repair_sound)   # see main.py
+    pipes = Pipes([Pipe(...), ...], zones, audio, repair_sound)   # see main.py; zones: every car's, in order
     pipes.update(dt, camera, pr.is_key_down(KEY_E))         # every frame, after life support
     pipes.draw(camera, brightness)                          # inside 3D mode: the steam (brightness(pipe): 0..1)
     pipes.draw_smoke(camera.position.z)                     # after the HUD: the smoke of the car you are in
@@ -11,7 +11,8 @@
 - A burst pipe swaps to its broken model, shoots steam out of the crack (Steam: particles, STEAM_*), loops
   PIPE_LEAK_SOUND there and its system loses PIPE_LEAK of its pressure (`regulator.leak`; each more burst pipe of
   it loses PIPE_LEAK of what is left): turn the red valve up to make up for it, and back down once it's fixed. Its
-  car fills with smoke (SMOKE_*), drawn over the whole screen while you are in it, and clears slowly after.
+  car fills with smoke (SMOKE_*), drawn over the whole screen while you are in it, and clears slowly after. The
+  smoke seeps through the doors into the next cars (SMOKE_SPREAD), the control room too, thinner the further it goes.
 - Fixing: look at it from within PIPE_REPAIR_REACH and hold E. A ring round the crosshair fills in PIPE_REPAIR_TIME
   (letting go or looking away starts it over), then you blink (BLINK_TIME): while your eyes are shut it is fixed.
 """
@@ -28,8 +29,8 @@ import pyray as pr
 from .audio import Audio
 from .config import (
     BLINK_TIME, PIPE_BURST_CHANCE, PIPE_CHECK_INTERVAL, PIPE_LEAK, PIPE_LEAK_SOUND, PIPE_REPAIR_REACH,
-    PIPE_REPAIR_TIME, SCREEN_H, SMOKE_CLEAR, SMOKE_COLOR, SMOKE_MAX, SMOKE_RISE, STEAM_COLOR, STEAM_LIFE, STEAM_RATE,
-    STEAM_SIZE, STEAM_SPEED, STEAM_SPREAD,
+    PIPE_REPAIR_TIME, SCREEN_H, SMOKE_CLEAR, SMOKE_COLOR, SMOKE_MAX, SMOKE_RISE, SMOKE_SPREAD, STEAM_COLOR, STEAM_LIFE,
+    STEAM_RATE, STEAM_SIZE, STEAM_SPEED, STEAM_SPREAD,
 )
 from .entity import Entity
 from .life_support import Regulator
@@ -49,7 +50,6 @@ class Steam:
     def __init__(self, origin: pr.Vector3, direction: pr.Vector3) -> None:
         self.origin: pr.Vector3 = origin
         self.direction: pr.Vector3 = pr.vector3_normalize(direction)
-        # two directions across it, for the spread
         side = pr.vector3_normalize(pr.vector3_cross_product(self.direction, pr.Vector3(0.0, 1.0, 0.0)))
         self._across = (side, pr.vector3_cross_product(side, self.direction))
         self.particles: list[_Particle] = []
@@ -71,14 +71,14 @@ class Steam:
         for p in self.particles:
             p.age += dt
             p.pos = pr.vector3_add(p.pos, pr.vector3_scale(p.vel, dt))
-            p.vel = pr.Vector3(p.vel.x * drag, p.vel.y * drag + 0.6 * dt, p.vel.z * drag)   # slows, rises
+            p.vel = pr.Vector3(p.vel.x * drag, p.vel.y * drag + 0.6 * dt, p.vel.z * drag)
         self.particles = [p for p in self.particles if p.age < STEAM_LIFE]
 
     def draw(self, camera: pr.Camera3D, texture: pr.Texture, brightness: float) -> None:
         small, big = STEAM_SIZE
         for p in self.particles:
             t = p.age / STEAM_LIFE
-            alpha = int(200 * (1.0 - t) ** 0.6 * min(t * 8.0, 1.0))   # fades in quickly, out slowly
+            alpha = int(200 * (1.0 - t) ** 0.6 * min(t * 8.0, 1.0))
             c = STEAM_COLOR
             color = pr.Color(int(c.r * brightness), int(c.g * brightness), int(c.b * brightness), alpha)
             pr.draw_billboard(camera, texture, p.pos, small + (big - small) * t, color)
@@ -93,9 +93,9 @@ class Pipe(Entity):
         self.whole_model: pr.Model = self.model
         self.burst_model: pr.Model = Entity(f"{name}_burst", burst_path, pos).model
         self.system: Regulator = system
-        self.zone: tuple[float, float] = zone   # its car's z range (the steam fog)
+        self.zone: tuple[float, float] = zone
         self.burst: bool = False
-        self.steam: Steam = Steam(pr.vector3_add(pos, crack), pr.Vector3(0.0, 0.0, -1.0))   # into the room
+        self.steam: Steam = Steam(pr.vector3_add(pos, crack), pr.Vector3(0.0, 0.0, -1.0))
         self.until_check: float = random.uniform(*PIPE_CHECK_INTERVAL)
 
     def set_burst(self, burst: bool) -> None:
@@ -118,16 +118,16 @@ class Pipe(Entity):
 
 
 class Pipes:
-    def __init__(self, pipes: list[Pipe], audio: Audio, repair_sound: str) -> None:
+    def __init__(self, pipes: list[Pipe], zones: list[tuple[float, float]], audio: Audio, repair_sound: str) -> None:
         self.pipes: list[Pipe] = pipes
         self.audio: Audio = audio
         self.repair_sound: str = repair_sound
-        self.smoke: dict[tuple[float, float], float] = {pipe.zone: 0.0 for pipe in pipes}   # per car, 0..1
-        self.target: Pipe | None = None   # the burst pipe you look at (within reach)
-        self.progress: float = 0.0        # 0..1 of the repair
+        self.smoke: dict[tuple[float, float], float] = {zone: 0.0 for zone in zones}   # per car in order, 0..1
+        self.target: Pipe | None = None
+        self.progress: float = 0.0
         self.blink: float = -1.0          # seconds into a blink, -1 = not blinking
         self._fixing: Pipe | None = None  # fixed when the eyes are shut
-        image = pr.gen_image_gradient_radial(64, 64, 0.0, pr.WHITE, pr.BLANK)   # a soft round puff
+        image = pr.gen_image_gradient_radial(64, 64, 0.0, pr.WHITE, pr.BLANK)
         self.puff: pr.Texture = pr.load_texture_from_image(image)
         pr.unload_image(image)
 
@@ -157,10 +157,13 @@ class Pipes:
                 if not pipe.burst and random.random() < PIPE_BURST_CHANCE * pipe.system.pressure ** 2:
                     self.burst(pipe)
             pipe.steam.update(dt)
-        for zone in self.smoke:
+        before = list(self.smoke.values())
+        for i, zone in enumerate(self.smoke):
             steaming = any(p.burst for p in self.pipes if p.zone == zone)
             rate = SMOKE_RISE if steaming else -SMOKE_CLEAR
-            self.smoke[zone] = min(max(self.smoke[zone] + rate * dt, 0.0), 1.0)
+            for other in before[max(i - 1, 0):i] + before[i + 1:i + 2]:   # through the doors, to the thinner side
+                rate += SMOKE_SPREAD * (other - before[i])
+            self.smoke[zone] = min(max(before[i] + rate * dt, 0.0), 1.0)
 
         if self.blink >= 0:   # eyes closing / shut / opening; it gets fixed while they are shut
             self.blink += dt
@@ -196,7 +199,7 @@ class Pipes:
         w, h = pr.get_screen_width(), pr.get_screen_height()
         pr.draw_rectangle(0, 0, w, h, pr.fade(SMOKE_COLOR, amount * 0.8))
         t = pr.get_time()
-        for i in range(6):   # each drifts sideways and wobbles, wrapping round the screen
+        for i in range(6):
             x = ((i * 0.37 + t * (0.02 + 0.01 * i)) % 1.4 - 0.2) * w
             y = (0.2 + 0.6 * ((i * 0.53) % 1.0) + 0.05 * math.sin(t * 0.7 + i)) * h
             size = h * (0.6 + 0.15 * math.sin(t * 0.3 + i * 2.0))
@@ -216,7 +219,7 @@ class Pipes:
     def draw_hud(self) -> None:
         w, h = pr.get_screen_width(), pr.get_screen_height()
         s = h / SCREEN_H
-        if self.target is not None and self.blink < 0:   # a ring round the crosshair; fills while you hold E
+        if self.target is not None and self.blink < 0:
             center = pr.Vector2(w / 2, h / 2)
             pr.draw_ring(center, 14 * s, 18 * s, 0, 360, 48, pr.fade(pr.WHITE, 0.3))
             if self.progress > 0:

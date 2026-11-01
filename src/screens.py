@@ -1,7 +1,7 @@
 """Screens: the control room console's displays.
 
     screens = Screens(control_room.pos)          # after init_window
-    screens.update(dt, depth, rate, speed, on)   # every frame, before begin_drawing (renders the depth panel)
+    screens.update(dt, depth, rate, speed, on, warnings)   # every frame, before begin_drawing (renders the depth panel)
     screens.draw()                               # inside 3D mode, after the scene
     screens.unload()
 
@@ -10,15 +10,16 @@ lit by the lamps: they glow on their own, also in a dark car. Off (black) once t
 - Drill screen (the green grid left of the vertical depth gauge): drill_1..4 cycled, as fast as the engine turns
   (DRILL_SCREEN_FPS at full speed, standing still when it stops). Cropped to the screen's proportions.
 - Depth panel (the black panel right of the gauge): "HLOUBKA", the depth in metres and how fast it digs, drawn into
-  a render texture.
+  a render texture, with a blinking red warning while the drill is in a hot spot or a gas pocket.
 """
 from __future__ import annotations
 
 import pyray as pr
 
+from . import ui
 from .config import (
-    DEPTH_PANEL_CORNERS, DEPTH_PANEL_SIZE, DRILL_SCREEN_CORNERS, DRILL_SCREEN_FPS, DRILL_SCREEN_FRAMES, SCREEN_BLACK,
-    SCREEN_GREEN,
+    ALARM_COLOR, DEPTH_PANEL_CORNERS, DEPTH_PANEL_SIZE, DRILL_SCREEN_CORNERS, DRILL_SCREEN_FPS, DRILL_SCREEN_FRAMES,
+    SCREEN_BLACK, SCREEN_GREEN,
 )
 
 
@@ -48,7 +49,6 @@ class Screens:
         self.panel_corners = [pr.vector3_add(car_pos, c) for c in DEPTH_PANEL_CORNERS]
         self.frame: float = 0.0
         self.on: bool = True
-        # crop the frames to the screen's proportions (top / bottom cut off evenly)
         width = pr.vector3_distance(self.drill_corners[0], self.drill_corners[1])
         height = pr.vector3_distance(self.drill_corners[0], self.drill_corners[3])
         image = self.frames[0]
@@ -56,25 +56,29 @@ class Screens:
         top, bottom = (1 - keep) / 2, (1 + keep) / 2
         self._drill_uvs = ((0.0, top), (1.0, top), (1.0, bottom), (0.0, bottom))
 
-    def update(self, dt: float, depth: float, rate: float, speed: float, on: bool) -> None:
-        """`rate`: metres / s it digs now; `speed`: the engine's (0..1) runs the drill animation."""
+    def update(self, dt: float, depth: float, rate: float, speed: float, on: bool, warnings: list[str]) -> None:
+        """`rate`: metres / s it digs now; `speed`: the engine's (0..1) runs the drill animation; `warnings`: lines
+        to blink under the title (the pockets the drill is in)."""
         self.on = on
         self.frame = (self.frame + DRILL_SCREEN_FPS * speed * dt) % len(self.frames)
         w, h = DEPTH_PANEL_SIZE
 
         def centered(msg: str, y: float, size: int, color: pr.Color = SCREEN_GREEN) -> None:
-            while size > 10 and pr.measure_text(msg, size) > w - 20:   # shrink a long number to fit
+            while size > 10 and pr.measure_text(msg, size) > w - 20:
                 size -= 2
             pr.draw_text(msg, (w - pr.measure_text(msg, size)) // 2, int(y - size / 2), size, color)
 
         pr.begin_texture_mode(self.panel)
         pr.clear_background(SCREEN_BLACK)
         dim = pr.fade(SCREEN_GREEN, 0.25)
-        for x in range(0, w, 31):   # the grid of the other screen
+        for x in range(0, w, 31):
             pr.draw_line(x, 0, x, h, dim)
         for y in range(0, h, 31):
             pr.draw_line(0, y, w, y, dim)
         centered("HLOUBKA", 45, 36)
+        if int(pr.get_time() * 2) % 2 == 0:
+            for i, warning in enumerate(warnings):
+                ui.draw_centered(warning, w / 2, 76 + i * 32, 28, ALARM_COLOR)
         centered(f"{depth:.0f}", h / 2, 80)
         centered("m", h / 2 + 65, 36)
         centered(f"{rate:.1f} m/s", h - 45, 28)

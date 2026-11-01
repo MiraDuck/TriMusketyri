@@ -25,7 +25,7 @@ class Alarm:
         self.audio: Audio = audio
         self.sound: str = sound
         self.active: bool = False
-        self._flash: int = -1   # number of the last flash that beeped
+        self._flash: int = -1
 
     def update(self, time: float, camera: pr.Camera3D) -> None:
         for lamp in self.lamps:

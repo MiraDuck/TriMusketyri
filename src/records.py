@@ -30,7 +30,7 @@ NO_REPORT: str = "žádné hlášení"   # depth / cause of a run that never sen
 @dataclass
 class Run:
     name: str
-    time: float               # seconds survived
+    time: float
     depth: float | None       # metres in the last report sent (None: none sent)
     cause: str | None         # what failed, as the surface expects it (None: no report sent)
     date: str = ""            # when it ended, "28.10.2026 14:05"

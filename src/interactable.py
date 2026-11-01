@@ -98,7 +98,7 @@ class Button(Lever):
         self.flipped = self.down and not self._was_down
         self._was_down = self.down
         self._swing(dt)
-        if self.down and self.angle == self.throw:   # all the way over: come back
+        if self.down and self.angle == self.throw:
             self.down = False
 
 
@@ -125,7 +125,7 @@ class Valve(Interactable):
         self.max_angle: float | None = None
         self.spin: float = 0.0
         self.drift: float = 0.0
-        self._drift_left: float = 0.0   # degrees it still creeps
+        self._drift_left: float = 0.0
         self.held: bool = False
         self._held_for: float = 0.0   # while drifting: how long it has been held
         self.turning: bool = False

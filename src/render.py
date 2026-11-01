@@ -75,7 +75,7 @@ def draw_hud(
     s = h / config.SCREEN_H
     if debug.menu:
         _draw_debug_menu(camera, camera_mode, player, debug, inspected or [], s, h)
-    pr.draw_circle(w // 2, h // 2, 4 * s, pr.WHITE)   # crosshair
+    pr.draw_circle(w // 2, h // 2, 4 * s, pr.WHITE)
 
 
 def _draw_debug_menu(camera: pr.Camera3D, camera_mode: int, player: Player, debug: DebugOptions,
@@ -96,7 +96,8 @@ def _draw_debug_menu(camera: pr.Camera3D, camera_mode: int, player: Player, debu
     keys = [("1 / 2", f"camera: {MODE_NAMES.get(camera_mode, 'CUSTOM')}", None),
             ("F1", "hitboxes + details", debug.hitboxes), ("F2", "wireframes", debug.wireframes),
             ("C", "collision meshes", debug.collision_meshes), ("L", "lighting off", debug.unlit),
-            ("V", "vignette off", debug.no_vignette), ("F4", "burst a pipe", None), ("F5", "a fault now", None),
+            ("V", "vignette off", debug.no_vignette), ("N", "nausea", debug.sick), ("F4", "burst a pipe", None),
+            ("F5", "a fault now", None), ("F6", "lights flicker", None),
             ("F3", "close (all off)", None)]
     width, height = 360, 16 + line * (4.5 + len(keys))   # the title, 3 lines about the camera, a gap, the keys
     rect(10, 10, width, height, pr.fade(pr.BLACK, 0.7))

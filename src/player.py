@@ -37,7 +37,6 @@ class Player:
         self.on_ground: bool = False
         self.colliding: bool = False
 
-    # ---- helpers ----
     def box(self) -> tuple[pr.Vector3, pr.BoundingBox]:
         """Returns (center, BoundingBox) of the player cuboid."""
         p = self.camera.position
@@ -54,7 +53,6 @@ class Player:
         cam.position = pr.Vector3(cam.position.x + dx, cam.position.y + dy, cam.position.z + dz)
         cam.target = pr.Vector3(cam.target.x + dx, cam.target.y + dy, cam.target.z + dz)
 
-    # ---- physics ----
     def apply_gravity(self, dt: float) -> None:
         """Pull the player down; resolve_collision() then pushes them back onto the floor."""
         self.vel_y = max(self.vel_y - GRAVITY * dt, -MAX_FALL_SPEED)
@@ -78,7 +76,7 @@ class Player:
     def _resolve_one(self, world: MeshCollider) -> bool:
         """Push the player out of one collider; sets on_ground if standing on it."""
         c, box = self.box()
-        if not pr.check_collision_boxes(box, world.bounds):   # broadphase
+        if not pr.check_collision_boxes(box, world.bounds):
             return False
 
         feet = c.y - PLAYER_HALF.y
@@ -102,7 +100,6 @@ class Player:
             if floor_y >= feet - 0.05:   # a little tolerance so walking down a slope stays "on ground"
                 self.on_ground = True
 
-        # --- Ceiling ---
         p = world.cast(c, UP, is_ceiling)
         if p is not None and p.y < head:
             push_y -= head - p.y
@@ -142,7 +139,7 @@ class Player:
         # knee height (just above anything we could step onto) and head height
         for h in (feet + STEP_UP + 0.1, head - 0.2):
             centre = pr.Vector3(c.x, h, c.z)
-            reach = {(d.x, d.z): hit(centre, d) for d in AXES}   # straight out from the centre
+            reach = {(d.x, d.z): hit(centre, d) for d in AXES}
             for d in AXES:
                 half, side_half = (PLAYER_HALF.x, PLAYER_HALF.z) if d.x else (PLAYER_HALF.z, PLAYER_HALF.x)
                 dists = [reach[(d.x, d.z)]]

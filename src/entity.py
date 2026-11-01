@@ -158,7 +158,7 @@ class Entity:
     ) -> None:
         self.name: str = name
         self.pos: pr.Vector3 = pos
-        self.tint: pr.Color = pr.WHITE   # colour the model is drawn with (multiplies its texture)
+        self.tint: pr.Color = pr.WHITE
         self.model_path: Path = Path(model_path)
         self.collision_path: Path | None = Path(collision_path) if collision_path else None
         warn_big_mtl(model_path)
@@ -170,7 +170,6 @@ class Entity:
         self.collider: MeshCollider | None = (
             MeshCollider(collision_path, pos) if collision_path else None
         )
-        # the collider's box if it has one, otherwise the visible model's box
         self.bounds: pr.BoundingBox = (
             self.collider.bounds if self.collider else world_bounds(self.model, pos)
         )

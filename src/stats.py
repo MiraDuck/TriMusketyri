@@ -23,7 +23,7 @@ PANEL_W: float = 1200
 PANEL_H: float = 760
 ROW_H: float = 40
 LIST_TOP: float = 190     # from the panel's top: the first row
-LIST_ROWS: int = 12       # rows shown at once
+LIST_ROWS: int = 12
 TEXT: float = 22
 # column: (header, x from the panel's left)
 COLUMNS: tuple[tuple[str, float], ...] = (("Jméno", 40), ("Poslední hloubka", 290), ("Přežitý čas", 525),
@@ -32,15 +32,17 @@ COLUMNS: tuple[tuple[str, float], ...] = (("Jméno", 40), ("Poslední hloubka", 
 
 class StatsScreen:
     def __init__(self) -> None:
-        self.runs: list[Run] = load_runs()[::-1]   # newest first
-        self.scroll: int = 0                        # the first row shown
-        self.open: Run | None = None                # the run whose report is shown
-        self.confirm: bool = False                  # asking whether to delete it
+        self.runs: list[Run] = load_runs()[::-1]
+        self.scroll: int = 0
+        self.open: Run | None = None
+        self.confirm: bool = False
 
     def run(self, audio: Audio, background: Callable[[], None]) -> bool:
         """Show it until Zpět / Esc (True) or the window closes (False). `background` draws the menu behind it."""
         while not pr.window_should_close():
             audio.update()
+            if pr.is_key_pressed(pr.KeyboardKey.KEY_F11):
+                pr.toggle_fullscreen()
             pr.begin_drawing()
             background()
             back = self.draw()
@@ -54,7 +56,7 @@ class StatsScreen:
         w, h = pr.get_screen_width(), pr.get_screen_height()
         s = h / SCREEN_H
         esc = pr.is_key_pressed(pr.KeyboardKey.KEY_ESCAPE)
-        if self.open is not None:   # one run's report
+        if self.open is not None:
             pr.draw_rectangle(0, 0, w, h, pr.fade(pr.BLACK, 0.6))
             draw_record(self.open, w / 2, h / 2 - 190 * s, s)
             left = pr.Rectangle(w / 2 - 270 * s, h / 2 + 150 * s, 250 * s, 56 * s)

@@ -54,7 +54,7 @@ class Engine:
             dial.sweep = 360.0
         self.state: EngineState = EngineState.RUNNING
         self.speed: float = ENGINE_START_POWER
-        self.depth: float = 0.0   # metres dug so far
+        self.depth: float = 0.0
         self.fuel_factor: float = 1.0   # what the fuel does to the power (see `drive`)
         self._valve_target: float | None = None   # the angle a restart is turning the valve up to
         for part in (spinner, valve, button):   # its state shows in the debug panel when you look at them
@@ -123,7 +123,7 @@ class Engine:
         else:
             self.speed = max(self.speed - ENGINE_COAST_RATE * dt, 0.0)
 
-        self.depth += DRILL_SPEED * self.speed * dt   # it digs as fast as it turns
+        self.depth += DRILL_SPEED * self.speed * dt
         self.spinner.speed = ENGINE_MAX_SPIN * self.speed
         if self.dial is not None:
             self.dial.value = self.dial.low + (self.dial.high - self.dial.low) * self._dial_fraction()

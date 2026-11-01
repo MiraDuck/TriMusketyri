@@ -83,14 +83,14 @@ class Fuel:
                  feed_sound: str, dial: Dial | None = None) -> None:
         self.pile: CoalPile = pile
         self.hatch: Hatch = hatch
-        self.coal: Entity = coal   # the piece you carry, modelled at its own origin
+        self.coal: Entity = coal
         self.audio: Audio = audio
         self.take_sound: str = take_sound
         self.feed_sound: str = feed_sound
-        self.dial: Dial | None = dial   # the fuel bar on the console
+        self.dial: Dial | None = dial
         self.level: float = FUEL_START
         self.carrying: bool = False
-        self.fed: int = 0   # pieces thrown in
+        self.fed: int = 0
         self.burn: float = 0.0   # fuel / s it burns now
         for part in (pile, hatch):
             part.debug_extra = self.debug_lines
@@ -113,7 +113,7 @@ class Fuel:
         return FUEL_OVERCLOCK_HEAT * self.overclock
 
     def update(self, dt: float, camera: pr.Camera3D, speed: float, depth: float) -> None:
-        if self.pile.clicked:   # take a piece, or put the one you carry back
+        if self.pile.clicked:
             self.carrying = not self.carrying
             self.audio.play_sound_at(self.take_sound, self.pile.center, camera, SFX_NEAR, SFX_FAR)
             print(f"FUEL: {'took a piece of coal' if self.carrying else 'put the coal back'}")

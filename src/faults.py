@@ -1,6 +1,6 @@
 """Faults: things breaking on their own while you play.
 
-    faults = FaultDirector(breakers, valves)
+    faults = FaultDirector(breakers, valves, flicker)   # flicker: starts the lights' flicker (flicker.py)
     faults.update(dt)    # every frame
 
 Each kind of fault has its own schedule: every `interval` seconds (a random time in that range) it rolls `chance`
@@ -9,11 +9,14 @@ now), plus a `_Schedule` for it in `self._schedules`.
 
 Faults so far:
   - Lights (every LIGHT_FAULT_INTERVAL, always): a random breaker flips by itself, so its car's lamp goes out, or
-    comes back on if it was off. Flip it back to fix it.
+    comes back on if it was off. Flip it back to fix it. With BREAKER_GROUP_CHANCE it takes its neighbours along:
+    BREAKER_GROUP_SIZE breakers side by side all flip, or all go off, or all come on, at the same time.
   - Drift (every FAULT_INTERVAL, FAULT_CHANCE): a random valve that isn't drifting yet creeps a little open or
     shut by itself (VALVE_DRIFT_AMOUNT of its range at VALVE_DRIFT_RATE, then it stops), pushing its system
     (oxygen, cooling, the engine's power) off a bit. Go and turn it back (holding it for VALVE_FIX_TIME stops it
     sooner).
+  - Flicker (every FLICKER_INTERVAL, FLICKER_CHANCE): the lights in the cars next to you stutter for a moment.
+    Nothing to fix.
 """
 from __future__ import annotations
 
@@ -21,15 +24,18 @@ import random
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .config import FAULT_CHANCE, FAULT_INTERVAL, LIGHT_FAULT_INTERVAL, VALVE_DRIFT_AMOUNT, VALVE_DRIFT_RATE
+from .config import (
+    BREAKER_GROUP_CHANCE, BREAKER_GROUP_SIZE, FAULT_CHANCE, FAULT_INTERVAL, FLICKER_CHANCE, FLICKER_INTERVAL,
+    LIGHT_FAULT_INTERVAL, VALVE_DRIFT_AMOUNT, VALVE_DRIFT_RATE,
+)
 from .interactable import Lever, Valve
 
 
 @dataclass
 class _Schedule:
     fault: Callable[[], bool]
-    interval: tuple[float, float]   # seconds between rolls, random in this range
-    chance: float                   # of happening on each roll (1 = every time)
+    interval: tuple[float, float]
+    chance: float
     until_next: float = field(init=False)
 
     def __post_init__(self) -> None:
@@ -37,12 +43,13 @@ class _Schedule:
 
 
 class FaultDirector:
-    def __init__(self, breakers: list[Lever], valves: list[Valve]) -> None:
-        self.breakers: list[Lever] = breakers
+    def __init__(self, breakers: list[Lever], valves: list[Valve], flicker: Callable[[], bool]) -> None:
+        self.breakers: list[Lever] = breakers   # in the order they sit on the wall
         self.valves: list[Valve] = valves
         self._schedules: list[_Schedule] = [
-            _Schedule(self._flip_breaker, LIGHT_FAULT_INTERVAL, 1.0),
+            _Schedule(self._flip_breakers, LIGHT_FAULT_INTERVAL, 1.0),
             _Schedule(self._drift_valve, FAULT_INTERVAL, FAULT_CHANCE),
+            _Schedule(flicker, FLICKER_INTERVAL, FLICKER_CHANCE),
         ]
 
     def update(self, dt: float) -> None:
@@ -60,12 +67,21 @@ class FaultDirector:
                 return True
         return False
 
-    def _flip_breaker(self) -> bool:
+    def _flip_breakers(self) -> bool:
+        """One breaker flips, or with BREAKER_GROUP_CHANCE a few side by side: each to its other side, or all off,
+        or all on. Always changes something: if they all are where they would go, they flip instead."""
         if not self.breakers:
             return False
-        breaker = random.choice(self.breakers)
-        breaker.down = not breaker.down   # swings like a click would; the main loop switches its lamp
-        print(f"FAULT: {breaker.name} flipped {'down' if breaker.down else 'up'}")
+        grouped = random.random() < BREAKER_GROUP_CHANCE
+        size = min(random.randint(*BREAKER_GROUP_SIZE) if grouped else 1, len(self.breakers))
+        first = random.randrange(len(self.breakers) - size + 1)
+        group = self.breakers[first:first + size]
+        down = random.choice((None, False, True))   # flip, all on, all off
+        if all(breaker.down == down for breaker in group):
+            down = None
+        for breaker in group:
+            breaker.down = not breaker.down if down is None else down
+            print(f"FAULT: {breaker.name} flipped {'down' if breaker.down else 'up'}")
         return True
 
     def _drift_valve(self) -> bool:

@@ -19,12 +19,14 @@ from src.engine import Engine
 from src.entity import Entity
 from src import ui
 from src.faults import FaultDirector
+from src.flicker import Flicker
 from src.fuel import CoalPile, Fuel, Hatch
 from src.head_bob import HeadBob
 from src.interactable import Button, Interactable, Lever, Valve
 from src.life_support import LifeSupport, Regulator
 from src.lighting import Lamp, Light, Lighting
 from src.menu import MainMenu, MenuChoice
+from src.nausea import Nausea
 from src.pause import pause_menu
 from src.pipes import Pipe, Pipes
 from src.player import Player
@@ -32,6 +34,7 @@ from src.render import draw_hud, draw_scene
 from src.screens import Screens
 from src.spinner import Spinner
 from src.stats import StatsScreen
+from src.tutorial import Tutorial
 from src.vignette import Vignette
 
 
@@ -87,7 +90,7 @@ def play(audio: Audio) -> bool:
     )
     camera_mode: int = pr.CameraMode.CAMERA_FIRST_PERSON
 
-    audio.stop_music()   # the menu theme
+    audio.stop_music()
     if config.START_MUSIC:
         audio.play_music(config.START_MUSIC)
     for filename, pos, volume, near, far, floor in config.SOUND_SOURCES:
@@ -125,7 +128,7 @@ def play(audio: Audio) -> bool:
     hatch = Hatch("engine_hatch", models / hatch_file, car_pos[hatch_car], throw=config.HATCH_THROW,
                   flip_time=config.HATCH_OPEN_TIME)
     interactables += [coal_pile, hatch]
-    coal = Entity("coal", models / config.COAL_MODEL, pr.Vector3(0.0, 0.0, 0.0))   # the piece you carry
+    coal = Entity("coal", models / config.COAL_MODEL, pr.Vector3(0.0, 0.0, 0.0))
     dials = [Dial(Path(f).stem.lower(), models / f, car_pos[car], low, high, sweep, start=start)
              for car, f, low, high, sweep, start in config.DIALS]
     dials += [Dial(Path(f).stem.lower(), models / f, car_pos[car], low, high, slide=distance)
@@ -149,10 +152,13 @@ def play(audio: Audio) -> bool:
         lighting.add(entity.model)
 
     vignette = Vignette()
+    nausea = Nausea()
     player = Player(camera)
     bob = HeadBob()
     debug = DebugOptions()
-    faults = FaultDirector([breaker for breaker, _ in breaker_lamps], list(valves.values()))
+    flicker = Flicker(lamps, audio)
+    faults = FaultDirector([breaker for breaker, _ in breaker_lamps], list(valves.values()),
+                           lambda: flicker.start(camera))
     engine = Engine(
         next(s for s in spinners if s.name == config.ENGINE_SPINNER), valves[config.ENGINE_VALVE],
         switches[config.ENGINE_BUTTON], next((d for d in dials if d.name == config.ENGINE_DIAL), None),
@@ -171,7 +177,6 @@ def play(audio: Audio) -> bool:
                        regulator("cooling", config.COOLING_PARTS, config.COOLING_COUPLING, config.COOLING_START,
                                  inverted=True))
     systems = {"oxygen": life.oxygen, "cooling": life.cooling}
-    # the air you can hear: the oxygen from its tank, the cooling from every car's vent (volumes set every frame)
     airs = [(audio.add_source(config.AIR_FLOW_SOUND, valves[config.OXYGEN_PARTS[0]].center, 0.0,
                               *config.AIR_FLOW_RANGE, name="air_oxygen"), life.oxygen, config.AIR_FLOW_VOLUME)]
     airs += [(audio.add_source(config.AIR_VENT_SOUND, lamp.pos, 0.0, *config.AIR_VENT_RANGE, name=f"air_{car.name}"),
@@ -180,18 +185,19 @@ def play(audio: Audio) -> bool:
                        crack, car_zone(car_pos[car].z))
                   for car, system, f, burst, crack in config.PIPES]
     pipe_car = {pipe: car for pipe, (car, *_) in zip(pipe_parts, config.PIPES)}
-    pipes = Pipes(pipe_parts, audio, repair_sound)
+    pipes = Pipes(pipe_parts, [car_zone(car.pos.z) for car in cars], audio, repair_sound)
     entities += pipe_parts
     colliders += [pipe.collider for pipe in pipe_parts if pipe.collider is not None]
     for pipe in pipe_parts:
         lighting.add(pipe.whole_model)
         lighting.add(pipe.burst_model)
-    fog = pr.Color(*(int(c * 255) for c in config.FOG_COLOR), 255)   # also behind everything
+    fog = pr.Color(*(int(c * 255) for c in config.FOG_COLOR), 255)
     alarm = Alarm(lamps, audio, alarm_sound)
     death = Death(audio, death_sound, ringing_sound)
     screens = Screens(car_pos["control_room"])
-    call = Call(audio, audio.load_sound(config.INTRO_CALL))   # the phone call: the drill waits until it's over
+    call = Call(audio, audio.load_sound(config.INTRO_CALL))
     computer = Computer(switches["computer_lever"], car_pos[config.COMPUTER_CAR], audio, call)
+    tutorial = Tutorial(car_pos[config.TUTORIAL_CAR])
 
     def die(cause: str, explode: bool = False) -> None:
         """Mission failed: the record only knows what the computer sent (no report: no depth, no cause)."""
@@ -210,9 +216,11 @@ def play(audio: Audio) -> bool:
     survived = 0.0   # seconds played (not paused), for the run's report
     ears_ringing = False   # rang since the strain last climbed (re-armed once it is low again)
     view_camera = camera
+    pr.poll_input_events()   # twice: forget the mouse's way here (the first frame would turn the view by all of it)
+    pr.poll_input_events()
     while not pr.window_should_close():
         dt: float = min(pr.get_frame_time(), config.MAX_DT)
-        audio.update(camera)   # the real camera is the listener (sources get their volume / pan from it)
+        audio.update(camera)
 
         # ---- dead: once the screen is black (exploded / passed out) only the death screen is left ----
         death.update(dt)
@@ -243,23 +251,28 @@ def play(audio: Audio) -> bool:
 
             # ---- world ----
             if not call.active:
-                faults.update(dt)   # breakers flip, valves drift
-            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F5):   # debug: break something now
+                faults.update(dt)
+            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F5):
                 faults.cause_fault()
-            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F4):   # debug: burst a pipe now
+            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F4):
                 whole = [pipe for pipe in pipe_parts if not pipe.burst]
                 if whole:
                     pipes.burst(random.choice(whole))
+            if debug.menu and pr.is_key_pressed(pr.KeyboardKey.KEY_F6):
+                flicker.start(camera)
+            flicker.update(dt)
             for thing in [*interactables, *dials]:
                 thing.update(dt)
             fuel.update(world, camera, engine.speed, engine.depth)   # take coal, the hatch, feed it; the engine burns it
             engine.update(world, fuel.factor)   # after its valve, lever and fuel, before the spinner turns it
             # oxygen + cooling, after their valves (overclocking heats the drill); they set their dials for next frame
             life.update(world, engine.depth, fuel.heat)
-            if life.cause:   # passed out
+            if life.cause:
                 die(life.cause)
-            pipes.update(world, camera, pr.is_key_down(pr.KeyboardKey.KEY_E))   # bursts (by pressure), hold E to fix
-            computer.update(dt, camera, status())   # skips the call, collects, then its lever sends the status
+            nausea.forced = debug.sick
+            nausea.update(dt, life.sickness)
+            pipes.update(world, camera, pr.is_key_down(pr.KeyboardKey.KEY_E))
+            computer.update(dt, camera, status())
             for spinner in spinners:
                 spinner.update(dt)
             for breaker, lamp in breaker_lamps:   # up = on; it switches as the handle passes halfway
@@ -269,18 +282,17 @@ def play(audio: Audio) -> bool:
                 die(config.DEATH_TEXT_FUEL if out_of_fuel else config.DEATH_TEXT_ENGINE, explode=True)
                 for light in lighting.lights:
                     light.on = False
-            alarm.active = engine.failing   # red flashing lamps + beeps until the motor runs again (none once dark)
+            alarm.active = engine.failing
             alarm.update(pr.get_time(), camera)
 
             # ---- sounds of the parts, from where they are ----
             for switch in switches.values():
-                if switch.flipped:   # clicked or flipped by a fault
+                if switch.flipped:
                     audio.play_sound_at(switch_sounds.get(switch.name, switch_sound), switch.center, camera,
                                         config.SFX_NEAR, config.SFX_FAR)
             for valve in valves.values():
                 if valve.turning and not audio.is_sound_playing(valve_sound):
                     audio.play_sound_at(valve_sound, valve.center, camera, config.SFX_NEAR, config.SFX_FAR)
-            # breathing hard while you are about to pass out: louder the closer you are
             breath = (life.strain - config.BREATH_FROM) / (1.0 - config.BREATH_FROM)
             quiet, loud = config.BREATH_VOLUME
             volume = quiet + (loud - quiet) * min(breath, 1.0) if breath > 0 else 0.0
@@ -288,13 +300,11 @@ def play(audio: Audio) -> bool:
                 audio.play_sound(breath_sound, audio.sfx_volume * volume)
             elif audio.is_sound_playing(breath_sound):
                 audio.set_sound_volume(breath_sound, volume)
-            # and your ears ring (quietly) as it gets close, once each time
             if ears_ringing and life.strain < config.BREATH_FROM:
                 ears_ringing = False
             elif not ears_ringing and life.strain > config.EARS_RINGING_FROM:
                 ears_ringing = True
                 audio.play_sound(ringing_sound, audio.sfx_volume * config.EARS_RINGING_VOLUME)
-            # the air: louder and higher the harder its system pushes
             low, high = config.AIR_PITCH
             for name, system, loudness in airs:
                 audio.sources[name].volume = loudness * system.pressure
@@ -305,13 +315,13 @@ def play(audio: Audio) -> bool:
                 player.update(dt, colliders)
                 forward, sideway = move_axes()
                 bob.update(forward != 0 or sideway != 0, sideway, forward, dt)
-                if bob.stepped and player.on_ground:   # a footstep, a little different each time
+                if bob.stepped and player.on_ground:
                     audio.play_sound(step_sound, audio.sfx_volume * config.STEP_VOLUME, pitch=random.uniform(0.9, 1.1))
-                view_camera = bob.apply(camera)
+                view_camera = nausea.apply(bob.apply(camera))
             else:
                 player.colliding = False
                 view_camera = camera
-            view_camera = death.shake(view_camera)   # harder and harder until the drill blows
+            view_camera = death.shake(view_camera)
 
         # ---- draw ----
         now = pr.get_time()
@@ -321,23 +331,26 @@ def play(audio: Audio) -> bool:
         lighting.set_fog(view_camera.position)
         lighting.update(now)
         screens.update(0.0 if paused else dt, engine.depth, config.DRILL_SPEED * engine.speed, engine.speed,
-                       not engine.dead)
+                       not engine.dead, life.warnings)
         pr.begin_drawing()
+        nausea.begin()
         pr.clear_background(fog)
-        inspected = looked_at(camera, entities) if debug.hitboxes else []   # their details go in the HUD
-        steam_light = lambda pipe: 1.0 if car_lamp[pipe_car[pipe]].light.on else 0.2   # dim in a dark car
+        inspected = looked_at(camera, entities) if debug.hitboxes else []
+        steam_light = lambda pipe: 1.0 if car_lamp[pipe_car[pipe]].light.on else 0.2
         draw_scene(view_camera, camera, player, entities, lighting.lights, debug, inspected,
-                   (screens.draw, computer.draw, lambda: pipes.draw(view_camera, steam_light),
+                   (screens.draw, computer.draw, lambda: tutorial.draw(car_lamp[config.TUTORIAL_CAR].light.on),
+                    lambda: pipes.draw(view_camera, steam_light),
                     lambda: fuel.draw_held(view_camera)))   # last: over everything
+        nausea.end()
         if not debug.no_vignette:
             vignette.draw()   # after the scene, before the HUD so the HUD stays readable
         draw_hud(camera, camera_mode, player, debug, inspected)
         pipes.draw_smoke(camera.position.z)   # over the HUD too: you are in it
-        pipes.draw_hud()   # the repair ring, the blink
-        death.draw()   # passing out: the screen goes dark
+        pipes.draw_hud()
+        death.draw()
         choice = pause_menu() if paused else None
         pr.end_drawing()
-        if choice == "leave":   # the run is not saved
+        if choice == "leave":
             back_to_menu = True
             break
         if choice == "resume":
@@ -349,10 +362,12 @@ def play(audio: Audio) -> bool:
         entity.unload()
     lighting.unload()
     vignette.unload()
+    nausea.unload()
     screens.unload()
     pipes.unload()
     computer.unload()
-    audio.clear()   # this game's sounds and music; the menu starts its own
+    tutorial.unload()
+    audio.clear()
     return back_to_menu
 
 

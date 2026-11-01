@@ -105,7 +105,6 @@ class Audio:
         self.sfx_volume: float = SFX_VOLUME
         pr.init_audio_device()
 
-    # ---------------- Music ----------------
     def play_music(self, name: str | Path, volume: float | None = None, loop: bool = True) -> None:
         """Start streaming a track from the music folder, replacing the current one."""
         self.stop_music()
@@ -147,7 +146,6 @@ class Audio:
             else:
                 pr.update_music_stream(source.music)
 
-    # ---------------- Sounds in the world ----------------
     def add_source(
         self, filename: str | Path, pos: pr.Vector3, volume: float = 1.0, near: float = 6.0, far: float = 14.0,
         floor: float = 0.0, name: str | None = None,
@@ -162,7 +160,6 @@ class Audio:
     def remove_source(self, name: str) -> None:
         self.sources.pop(name).unload()
 
-    # ---------------- Sounds ----------------
     def load_sound(self, filename: str | Path, name: str | None = None) -> str:
         """Load SFX/<filename>. Referred to by name, default = file name without extension."""
         key = name or Path(filename).stem
@@ -216,7 +213,6 @@ class Audio:
     def is_sound_playing(self, name: str) -> bool:
         return pr.is_sound_playing(self.sounds[name])
 
-    # ---------------- Cleanup ----------------
     def clear(self) -> None:
         """Stop and free the music, sources and sounds; the device stays open for the next ones."""
         self.stop_music()

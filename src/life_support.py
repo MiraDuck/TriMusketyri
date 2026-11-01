@@ -5,6 +5,8 @@ LIFE_SAFE for too long and you pass out (Death).
     life.update(dt, depth, engine_heat)    # every frame, after the valves (the deeper, the hotter)
     life.cause                             # None, or the death text once you passed out
     life.strain                            # 0..1: how close to passing out (for the eyes-closing effect, later)
+    life.sickness                          # 0..1: how sick the levels make you feel (Nausea)
+    life.warnings                          # what the console warns about: the pockets the drill is in
 
 Each system is a Regulator with a red valve (PRESSURE: how hard it pushes, 0..1 = closed..open) and a blue valve
 (the IDEAL LEVEL it pushes towards). Every second the level moves `coupling * pressure * (ideal - level)` towards
@@ -20,7 +22,8 @@ dials show the pressure and the level, 0..100 (the level sliders' red ends are o
 
 On top of that the drift moves (`Pockets`, `Wobble`): the drill digs through hot spots (cold ones sometimes) and gas
 pockets at random depths, each pushing its level away while the drill is in it, and both drifts sway a little all
-the time. The pockets and HEAT_MAX are sized so that full pressure can still hold the level.
+the time. The hot spots get stronger with depth (HOT_SPOT_GROWTH). The pockets and HEAT_MAX are sized so that both
+valves wide open can still hold the level.
 """
 from __future__ import annotations
 
@@ -31,8 +34,9 @@ from dataclasses import dataclass, field
 from .config import (
     COLD_SPOT_CHANCE, COOLING_COUPLING, DEATH_TEXT_COLD, DEATH_TEXT_HOT, DEATH_TEXT_OXYGEN_HIGH, DEATH_TEXT_OXYGEN_LOW,
     GAS_POCKET_OXYGEN, GAS_POCKET_SPACING, GAS_POCKET_WIDTH, HEAT, HEAT_MAX, HEAT_PER_METRE, HEAT_WOBBLE,
-    HOT_SPOT_HEAT, HOT_SPOT_SPACING, HOT_SPOT_WIDTH, LIFE_PASS_OUT_TIME, LIFE_PRESSURE_RATE, LIFE_SAFE,
-    LIFE_VALVE_TURNS, OXYGEN_COUPLING, OXYGEN_USE, OXYGEN_WOBBLE, WOBBLE_RATE, WOBBLE_TIME,
+    HOT_SPOT_GROWTH, HOT_SPOT_GROWTH_DEPTH, HOT_SPOT_HEAT, HOT_SPOT_SPACING, HOT_SPOT_WIDTH, LIFE_PASS_OUT_TIME,
+    LIFE_PRESSURE_RATE, LIFE_SAFE, LIFE_VALVE_TURNS, NAUSEA_COMFORT, NAUSEA_RANGE, OXYGEN_COUPLING, OXYGEN_USE,
+    OXYGEN_WOBBLE, POCKET_WARNINGS, WOBBLE_RATE, WOBBLE_TIME,
 )
 from .dial import Dial
 from .head_bob import smooth
@@ -56,23 +60,27 @@ class Pocket:
 
 class Pockets:
     """The pockets of one kind ahead of the drill: a new one every `spacing` metres (random), `width` deep, each
-    with a strength from `strength`; with `flip_chance` it pushes the other way instead (and is a `flip_kind`)."""
+    with a strength from `strength` (x up to `growth` the deeper it is, reached at HOT_SPOT_GROWTH_DEPTH); with
+    `flip_chance` it pushes the other way instead (and is a `flip_kind`)."""
 
     def __init__(self, kind: str, spacing: tuple[float, float], width: tuple[float, float],
-                 strength: tuple[float, float], flip_kind: str = "", flip_chance: float = 0.0) -> None:
+                 strength: tuple[float, float], flip_kind: str = "", flip_chance: float = 0.0,
+                 growth: float = 1.0) -> None:
         self.kind: str = kind
+        self.growth: float = growth
         self.spacing: tuple[float, float] = spacing
         self.width: tuple[float, float] = width
         self.strength: tuple[float, float] = strength
         self.flip_kind: str = flip_kind
         self.flip_chance: float = flip_chance
         self.pockets: list[Pocket] = []
-        self._next: float = random.uniform(*spacing)   # where the next one starts (m)
+        self._next: float = random.uniform(*spacing)
 
     def drift(self, depth: float) -> float:
         """The push at `depth` (level / s) of the pockets the drill is in."""
         while self._next <= depth:
             strength = random.uniform(*self.strength)
+            strength *= 1.0 + (self.growth - 1.0) * min(self._next / HOT_SPOT_GROWTH_DEPTH, 1.0)
             kind = self.kind
             if random.random() < self.flip_chance:
                 strength, kind = -strength, self.flip_kind
@@ -132,7 +140,7 @@ class Regulator:
         self.leak: float = 0.0     # share of the pressure lost through a burst pipe
         self.strain: float = 0.0   # 0..1, 1 = passed out
         self.drift: float = 0.0    # what pulled the level away last frame (level / s)
-        self.pocket: Pocket | None = None   # the pocket the drill is in (debug panel)
+        self.pocket: Pocket | None = None
 
     @staticmethod
     def _opening(valve: Valve) -> float:
@@ -148,6 +156,12 @@ class Regulator:
         """"low" / "high" while the level is outside LIFE_SAFE."""
         low, high = LIFE_SAFE
         return "low" if self.level < low else "high" if self.level > high else None
+
+    @property
+    def discomfort(self) -> float:
+        """0..1: how far the level is outside NAUSEA_COMFORT (1 = NAUSEA_RANGE or more)."""
+        low, high = NAUSEA_COMFORT
+        return min(max(low - self.level, self.level - high, 0.0) / NAUSEA_RANGE, 1.0)
 
     def update(self, dt: float, drift: float) -> None:
         self.drift = drift
@@ -177,7 +191,7 @@ class LifeSupport:
         self.oxygen: Regulator = oxygen
         self.cooling: Regulator = cooling
         self.hot_spots: Pockets = Pockets("hot spot", HOT_SPOT_SPACING, HOT_SPOT_WIDTH, HOT_SPOT_HEAT,
-                                          "cold spot", COLD_SPOT_CHANCE)
+                                          "cold spot", COLD_SPOT_CHANCE, HOT_SPOT_GROWTH)
         self.gas_pockets: Pockets = Pockets("gas pocket", GAS_POCKET_SPACING, GAS_POCKET_WIDTH, GAS_POCKET_OXYGEN)
         self.heat_wobble: Wobble = Wobble(HEAT_WOBBLE)
         self.oxygen_wobble: Wobble = Wobble(OXYGEN_WOBBLE)
@@ -200,6 +214,16 @@ class LifeSupport:
     @property
     def strain(self) -> float:
         return max(self.oxygen.strain, self.cooling.strain)
+
+    @property
+    def sickness(self) -> float:
+        """0..1: how sick you feel: the worse level, or how close you are to passing out."""
+        return max(self.oxygen.discomfort, self.cooling.discomfort, self.strain)
+
+    @property
+    def warnings(self) -> list[str]:
+        """What the console warns about: the pockets the drill is in now."""
+        return [POCKET_WARNINGS[system.pocket.kind] for system in (self.cooling, self.oxygen) if system.pocket]
 
     @property
     def cause(self) -> str | None:

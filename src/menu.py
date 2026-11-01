@@ -29,8 +29,8 @@ class MenuChoice(Enum):
 
 
 # In pixels of the background images (1500 x 1000), so the buttons stay under the title at any window size.
-BUTTONS_CENTER_X: float = 1080   # middle of the C.O.R.E. sign
-BUTTONS_TOP: float = 620         # just below it
+BUTTONS_CENTER_X: float = 1080
+BUTTONS_TOP: float = 620
 BUTTON_W: float = 380
 BUTTON_H: float = 60
 BUTTON_GAP: float = 20
@@ -45,7 +45,7 @@ class MainMenu:
 
     def __init__(self, options: tuple[MenuChoice, ...] = (MenuChoice.PLAY, MenuChoice.STATS, MenuChoice.QUIT)) -> None:
         self.options: tuple[MenuChoice, ...] = options
-        self.hovered: int | None = None   # index of the button under the mouse
+        self.hovered: int | None = None
         self.backgrounds: list[pr.Texture] = [pr.load_texture(str(path)) for path in config.MENU_BACKGROUNDS]
         missing = [path.name for path, texture in zip(config.MENU_BACKGROUNDS, self.backgrounds) if not texture.width]
         if missing:   # (a failed load is 0 x 0: don't scale by it)
@@ -105,6 +105,9 @@ class MainMenu:
             size = BUTTON_TEXT_SIZE * s
             ui.draw_centered(option.value, rect.x + rect.width / 2, rect.y + (rect.height - size) / 2, size,
                              ui.DARK_GREEN if on else ui.GREEN)
+        last = self._buttons()[-1]
+        ui.draw_centered(config.MENU_FULLSCREEN_HINT, last.x + last.width / 2, last.y + last.height + 12 * s, 20 * s,
+                         ui.DIM)
 
     def run(self, audio: Audio | None = None) -> MenuChoice:
         """Show the menu until a button is clicked (Esc or closing the window counts as Quit). Leaves the cursor

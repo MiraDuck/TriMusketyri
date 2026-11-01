@@ -57,6 +57,8 @@ def handle_hotkeys(camera: pr.Camera3D, camera_mode: int, debug: DebugOptions) -
         debug.unlit = not debug.unlit
     if pr.is_key_pressed(pr.KeyboardKey.KEY_V):
         debug.no_vignette = not debug.no_vignette
+    if pr.is_key_pressed(pr.KeyboardKey.KEY_N):
+        debug.sick = not debug.sick
     return camera_mode
 
 
@@ -94,7 +96,7 @@ def handle_interaction(
 def move_camera(camera: pr.Camera3D, camera_mode: int, dt: float, look: bool = True) -> None:
     """Apply movement + mouse look. Space/Shift move vertically and the mouse wheel zooms, free camera only.
     look=False ignores the mouse (it is turning something you hold)."""
-    step = PLAYER_SPEED * dt    # distance moved this frame
+    step = PLAYER_SPEED * dt
     forward, sideway = move_axes()
     free = camera_mode == pr.CameraMode.CAMERA_FREE
     K = pr.KeyboardKey

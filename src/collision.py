@@ -13,9 +13,9 @@ from .config import ROOT
 NormalTest = Callable[[pr.Vector3], bool]
 
 
-def is_floor(n: pr.Vector3) -> bool:   return n.y > 0.5            # faces up
-def is_ceiling(n: pr.Vector3) -> bool: return n.y < -0.5           # faces down
-def is_wall(n: pr.Vector3) -> bool:    return abs(n.y) < 0.5       # steep
+def is_floor(n: pr.Vector3) -> bool:   return n.y > 0.5
+def is_ceiling(n: pr.Vector3) -> bool: return n.y < -0.5
+def is_wall(n: pr.Vector3) -> bool:    return abs(n.y) < 0.5
 
 
 def world_bounds(model: pr.Model, pos: pr.Vector3) -> pr.BoundingBox:

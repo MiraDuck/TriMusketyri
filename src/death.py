@@ -42,8 +42,8 @@ class Death:
         self.ringing: str = ringing
         self.active: bool = False
         self.explode: bool = False
-        self.run: Run | None = None   # the report, once started
-        self.time: float = 0.0       # since start()
+        self.run: Run | None = None
+        self.time: float = 0.0
         self.finished: bool = False
         self.saved: bool = False
 
@@ -113,7 +113,7 @@ class Death:
         if not self.active:
             return
         w, h = pr.get_screen_width(), pr.get_screen_height()
-        if not self.over:   # passing out: the screen goes dark over the game
+        if not self.over:
             if not self.explode:
                 pr.draw_rectangle(0, 0, w, h, pr.fade(pr.BLACK, self.time / PASS_OUT_FADE))
             return

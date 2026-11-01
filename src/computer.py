@@ -53,7 +53,7 @@ MORSE: dict[str, str] = {
     "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-", "5": ".....", "6": "-....", "7": "--...",
     "8": "---..", "9": "----.",
 }
-SOUND_NAME: str = "computer_morse"   # the message's sound in Audio
+SOUND_NAME: str = "computer_morse"
 ENGINE_STATES: dict[str, str] = {"running": "běží", "dying": "umírá", "starting": "start", "dead": "stojí"}
 
 
@@ -62,7 +62,7 @@ class Status:
     """The drill's readings: what the computer collects and sends."""
     depth: float         # metres
     engine: float        # speed, 0..1 (more when overclocked)
-    engine_state: str    # EngineState.value
+    engine_state: str
     fuel: float          # 0..1
     oxygen: float        # level, 0..1
     temperature: float   # level, 0..1
@@ -111,7 +111,7 @@ class Computer:
         self.collecting: float = COMPUTER_COOLDOWN   # seconds until the data is ready (0 = ready)
         self.sent: int = 0
         self.last_depth: float | None = None   # in the last report sent: what the run's record shows
-        self.report: Status | None = None      # the last report sent, shown for COMPUTER_REPORT_TIME
+        self.report: Status | None = None
         self.report_left: float = 0.0
         self.clock: float = 0.0
         self._call_was_active: bool = call.active
@@ -141,7 +141,7 @@ class Computer:
         self.clock += dt
         if self.lever.flipped and self.call.active:
             self.call.skip()
-        if self._call_was_active and not self.call.active:   # the call is over (or skipped): wish them luck
+        if self._call_was_active and not self.call.active:
             self.luck = COMPUTER_LUCK_TIME
             self._beep(COMPUTER_LUCK, camera)
         self._call_was_active = self.call.active
@@ -150,7 +150,7 @@ class Computer:
             self.last_depth = status.depth
             self.report, self.report_left = status, COMPUTER_REPORT_TIME
             print(f"COMPUTER: sent report {self.sent}: {status}")
-            self._beep(f"{status.depth:.0f} M", camera)   # the depth, in Morse
+            self._beep(f"{status.depth:.0f} M", camera)
             self.collecting = COMPUTER_COOLDOWN
         if self.phase == "luck":
             self.luck = max(self.luck - dt, 0.0)
@@ -167,7 +167,7 @@ class Computer:
         phase = self.phase
         pr.begin_texture_mode(self.screen)
         pr.clear_background(SCREEN_BLACK)
-        for x in range(0, w, 32):   # the grid of the other screens
+        for x in range(0, w, 32):
             pr.draw_line(x, 0, x, h, pr.fade(green, 0.12))
         for y in range(0, h, 32):
             pr.draw_line(0, y, w, y, pr.fade(green, 0.12))
@@ -183,7 +183,7 @@ class Computer:
             ui.draw_centered("Páka = přeskočit", w / 2, 380, 48, green)
         elif phase == "luck":
             ui.draw_centered(COMPUTER_LUCK, w / 2, (h - 84) / 2, 84, green)
-        elif phase == "report":   # what was just sent
+        elif phase == "report":
             r = self.report
             sending = self.audio.is_sound_playing(SOUND_NAME)
             ui.draw_centered("ODESÍLÁNÍ" + "." * (int(self.clock * 3) % 4) if sending else "ODESLÁNO", w / 2, 22, 50,
@@ -199,7 +199,7 @@ class Computer:
         elif phase == "collecting":
             ui.draw_centered("SBÍRÁNÍ DAT" + "." * (int(self.clock * 2) % 4), w / 2, 130, 68, green)
             ui.draw_centered(format_time(self.collecting + 0.99), w / 2, 260, 68, green)
-        else:   # ready
+        else:
             if blink:
                 ui.draw_centered("DATA PŘIPRAVENA", w / 2, 130, 68, green)
             ui.draw_centered("Páka = odeslat", w / 2, 280, 48, green)

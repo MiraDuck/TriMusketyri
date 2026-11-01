@@ -24,10 +24,12 @@ class DebugOptions:
     collision_meshes: bool = False  # C:  draw each solid entity's collision mesh instead of its visible model
     unlit: bool = False             # L:  turn the lighting shader off (everything full bright)
     no_vignette: bool = False       # V:  turn the vignette off
+    sick: bool = False              # N:  full nausea
 
     def close(self) -> None:
         """Close the menu: every debug view off."""
         self.menu = self.hitboxes = self.wireframes = self.collision_meshes = self.unlit = self.no_vignette = False
+        self.sick = False
 
 
 def looked_at(camera: pr.Camera3D, entities: Iterable[Entity], reach: float = DEBUG_REACH) -> list[Entity]:

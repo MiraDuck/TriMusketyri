@@ -57,10 +57,11 @@ class Light:
         self.fill: float = fill
         self.fill_color: tuple[float, float, float] = (1.0, 1.0, 1.0)
         self.on: bool = True
+        self.flickered: bool = False   # dark for a moment (flicker.py); `on` is the breaker's
 
     def strength(self, time: float) -> float:
         # blinking: (time * blink) % 1 runs 0..1 once per blink; the light is off for the second half
-        if not self.on or (self.blink and (time * self.blink) % 1.0 >= 0.5):
+        if not self.on or self.flickered or (self.blink and (time * self.blink) % 1.0 >= 0.5):
             return 0.0
         return self.intensity
 
@@ -106,7 +107,7 @@ class Lamp(Entity):
     def update(self, time: float) -> None:
         if self.light.strength(time) <= 0:
             self.tint = LAMP_OFF_TINT
-        else:   # glows in its light's colour while in an alarm
+        else:
             self.tint = pr.Color(*self.light.color) if self.alarm else LAMP_ON_TINT
 
     def debug_lines(self) -> list[str]:
@@ -138,7 +139,6 @@ class Lighting:
         self._set_float("fogDensity", FOG_DENSITY)
         self._set_vec("fogColor", FOG_COLOR)
         self.set_fog(pr.Vector3(0.0, 0.0, 0.0))
-        # each lit model with copies of its original shaders, to put back when disabled
         self._models: list[tuple[pr.Model, list[pr.Shader]]] = []
 
     def _set_float(self, name: str, value: float) -> None:
