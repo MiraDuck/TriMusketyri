@@ -6,6 +6,7 @@ runs.json
 *.dist/
 
 hidden/
+_Blender/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
